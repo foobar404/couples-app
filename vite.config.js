@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/couples-app/' : '/',
+  base: '/couples-app/',
   plugins: [
     react(),
     VitePWA({
@@ -55,8 +55,8 @@ export default defineConfig({
         theme_color: '#e91e63',
         background_color: '#ffffff',
         display: 'standalone',
-        start_url: process.env.NODE_ENV === 'production' ? '/couples-app/' : '/',
-        scope: process.env.NODE_ENV === 'production' ? '/couples-app/' : '/',
+        start_url: '/couples-app/',
+        scope: '/couples-app/',
         orientation: 'portrait',
         categories: ['lifestyle', 'social'],
         icons: [
