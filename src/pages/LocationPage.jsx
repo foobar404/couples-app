@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../utils/appContext';
+import { useApp } from '../utils/AppContext';
 
 export const LocationPage = () => {
   const { data, partnerData, needsSetup, currentUser, updateLocation } = useApp();
@@ -188,7 +188,7 @@ export const LocationPage = () => {
 
     const options = {
       enableHighAccuracy: true,
-      timeout: 10000,
+      timeout: 2000,
       maximumAge: 0
     };
 

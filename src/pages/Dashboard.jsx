@@ -11,7 +11,7 @@ import {
   PhotosWidget,
   WidgetConfig 
 } from '../components/widgets';
-import { useApp } from '../utils/appContext.jsx';
+import { useApp } from '../utils/AppContext';
 import { useNavigation } from '../utils/hooks';
 
 export const Dashboard = () => {

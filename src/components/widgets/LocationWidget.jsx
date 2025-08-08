@@ -1,6 +1,6 @@
 import React from 'react';
 import { Widget } from '../UI';
-import { useApp } from '../../utils/appContext';
+import { useApp } from '../../utils/AppContext';
 
 export const LocationWidget = ({ 
   partnerDisplayName: propPartnerDisplayName

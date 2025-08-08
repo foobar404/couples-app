@@ -13,7 +13,7 @@ import { NotesPage } from './pages/NotesPage';
 import { GamesPage } from './pages/GamesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useNavigation } from './utils/hooks';
-import { useApp } from './utils/appContext';
+import { useApp } from './utils/AppContext';
 import { signInWithGoogle, signOutUser } from './utils/firebase';
 
 function AppContent() {

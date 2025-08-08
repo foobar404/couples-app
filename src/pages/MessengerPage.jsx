@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../utils/appContext';
+import { useApp } from '../utils/AppContext';
 
 export const MessengerPage = () => {
   const { data, partnerData, needsSetup, currentUser, addMessage } = useApp();

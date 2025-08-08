@@ -66,7 +66,7 @@ export const AppProvider = ({ children }) => {
     if (isSynced && data.lastUpdated) {
       const timeoutId = setTimeout(() => {
         syncDataToFirebase();
-      }, 10000); // Changed from 2000 to 10000 (10 seconds)
+      }, 2000);
       
       return () => clearTimeout(timeoutId);
     }
@@ -462,12 +462,12 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Polling functions for 10-second updates
+  // Polling functions for 2-second updates
   const startDataPolling = (userEmail, partnerEmail) => {
     // Clear existing intervals
     stopDataPolling();
     
-    // Poll user data every 10 seconds
+    // Poll user data every 2 seconds
     const userPolling = setInterval(async () => {
       try {
         const userData = await getUserData(userEmail);
@@ -489,11 +489,11 @@ export const AppProvider = ({ children }) => {
       } catch (error) {
         console.error('Error polling user data:', error);
       }
-    }, 10000);
+    }, 2000);
     
     setPollingInterval(userPolling);
     
-    // Poll partner data every 10 seconds if partner exists
+    // Poll partner data every 2 seconds if partner exists
     if (partnerEmail) {
       const partnerPolling = setInterval(async () => {
         try {
@@ -504,7 +504,7 @@ export const AppProvider = ({ children }) => {
         } catch (error) {
           console.error('Error polling partner data:', error);
         }
-      }, 10000);
+      }, 2000);
       
       setPartnerPollingInterval(partnerPolling);
     }

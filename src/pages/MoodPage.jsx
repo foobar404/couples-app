@@ -3,7 +3,7 @@ import { Calendar } from '../components/Calendar';
 import { MoodSelector } from '../components/MoodSelector';
 import { Card } from '../components/UI';
 import { useCalendar } from '../utils/hooks';
-import { useApp } from '../utils/appContext';
+import { useApp } from '../utils/AppContext';
 
 export const MoodPage = () => {
   const { data, updateMood } = useApp();
