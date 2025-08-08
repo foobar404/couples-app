@@ -36,8 +36,8 @@ export const MoodSelector = ({ selectedMood, onMoodSelect, className = '' }) => 
       <div className="relative flex items-center">
         <button
           onClick={scrollLeft}
-          className="btn w-6 h-6 mr-1 flex-shrink-0 text-textSecondary hover:text-primary rounded"
-          style={{ minWidth: '24px', fontSize: '14px' }}
+          className="btn w-6 h-10 mr-1 flex-shrink-0 text-textSecondary hover:text-primary rounded"
+          style={{ minWidth: '24px', fontSize: '16px' }}
           aria-label="Scroll left"
         >
           ‹
@@ -62,8 +62,8 @@ export const MoodSelector = ({ selectedMood, onMoodSelect, className = '' }) => 
         
         <button
           onClick={scrollRight}
-          className="btn w-6 h-6 ml-1 flex-shrink-0 text-textSecondary hover:text-primary rounded"
-          style={{ minWidth: '24px', fontSize: '14px' }}
+          className="btn w-6 h-10 ml-1 flex-shrink-0 text-textSecondary hover:text-primary rounded"
+          style={{ minWidth: '24px', fontSize: '16px' }}
           aria-label="Scroll right"
         >
           ›

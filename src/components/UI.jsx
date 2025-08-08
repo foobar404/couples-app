@@ -87,7 +87,7 @@ export const Widget = ({ title, action, children, onClick, to, className = '' })
   );
 };
 
-export const Navigation = ({ tabs, activeTab, onTabChange }) => {
+export const Navigation = ({ tabs, activeTab, onTabChange, onMenuOpen, showMenuButton = true }) => {
   return (
     <nav className="nav">
       <div className="nav__wave">
@@ -102,6 +102,20 @@ export const Navigation = ({ tabs, activeTab, onTabChange }) => {
             </button>
           </div>
         ))}
+        
+        {/* Menu Button */}
+        {showMenuButton && (
+          <div className="nav__item">
+            <button
+              className="nav__button nav__button--menu"
+              onClick={onMenuOpen}
+              title="All pages"
+            >
+              <span className="nav__icon">⋯</span>
+              <span className="nav__label">More</span>
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   );

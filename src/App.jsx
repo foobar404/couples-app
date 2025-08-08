@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Navigation } from './components/UI';
+import { NavigationMenu } from './components/NavigationMenu';
 import { PWAPrompt } from './components/PWAPrompt';
 import { UpdateNotification } from './components/UpdateNotification';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Dashboard } from './pages/Dashboard';
 import { MoodPage } from './pages/MoodPage';
+import { MessengerPage } from './pages/MessengerPage';
+import { LocationPage } from './pages/LocationPage';
 import { NotesPage } from './pages/NotesPage';
 import { GamesPage } from './pages/GamesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useNavigation } from './utils/hooks';
-import { useApp } from './utils/AppContext';
+import { useApp } from './utils/appContext';
 import { signInWithGoogle, signOutUser } from './utils/firebase';
 
 function AppContent() {
@@ -35,8 +38,20 @@ function AppContent() {
     }
   }, [isLoading, currentUser]);
 
-  const handleSignIn = async () => {
+  const handleSignIn = async (emailOverride = null) => {
     try {
+      // If an email is provided and it's a test email in dev mode, bypass Google sign-in
+      if (import.meta.env.DEV && emailOverride && (emailOverride === 'test.user@example.com' || emailOverride === 'test.partner@example.com')) {
+        const userInfo = {
+          uid: emailOverride === 'test.partner@example.com' ? 'test-partner-uid' : 'test-user-uid',
+          name: emailOverride === 'test.partner@example.com' ? 'Test Partner' : 'Test User',
+          email: emailOverride,
+          imageUrl: null
+        };
+        await signInUser(userInfo);
+        return;
+      }
+      
       const user = await signInWithGoogle();
       const userInfo = {
         uid: user.uid,
@@ -92,7 +107,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app">
       {/* PWA Components */}
       <OfflineIndicator />
       <UpdateNotification />
@@ -115,37 +130,64 @@ function AppContent() {
       )}
 
       {/* Main Content */}
-      <div className="pb-16">
+      <div className="app__main">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/mood" element={<MoodPage />} />
-          <Route path="/notes" element={<NotesPage />} />
-          <Route path="/games" element={<GamesPage />} />
-          <Route 
-            path="/settings" 
-            element={
-              <SettingsPage
-                onSignIn={handleSignIn}
-                onSignOut={handleSignOut}
-                isUserSignedIn={!!currentUser}
-                currentUser={currentUser}
-                onSetPartnerEmail={handlePartnerSetup}
-                partnerEmail={partnerEmail}
-                syncStatus={{ lastSync }}
-                onUpdateDisplayName={handleDisplayNameUpdate}
-                currentDisplayName={data.settings?.displayName}
+          {/* Protected routes - only show if user is signed in */}
+          {currentUser ? (
+            <>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/mood" element={<MoodPage />} />
+              <Route path="/messenger" element={<MessengerPage />} />
+              <Route path="/location" element={<LocationPage />} />
+              <Route path="/notes" element={<NotesPage />} />
+              <Route path="/games" element={<GamesPage />} />
+              <Route 
+                path="/settings" 
+                element={
+                  <SettingsPage
+                    onSignIn={handleSignIn}
+                    onSignOut={handleSignOut}
+                    isUserSignedIn={!!currentUser}
+                    currentUser={currentUser}
+                    onSetPartnerEmail={handlePartnerSetup}
+                    partnerEmail={partnerEmail}
+                    syncStatus={{ lastSync }}
+                    onUpdateDisplayName={handleDisplayNameUpdate}
+                    currentDisplayName={data.settings?.displayName}
+                  />
+                } 
               />
-            } 
-          />
-          {/* Redirect to settings if user is not signed in */}
-          {!currentUser && <Route path="*" element={<Navigate to="/settings" replace />} />}
-          {/* Redirect any unknown routes to dashboard */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+              {/* Redirect any unknown routes to dashboard */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            <>
+              {/* Public routes - only settings page when not signed in */}
+              <Route 
+                path="/settings" 
+                element={
+                  <SettingsPage
+                    onSignIn={handleSignIn}
+                    onSignOut={handleSignOut}
+                    isUserSignedIn={!!currentUser}
+                    currentUser={currentUser}
+                    onSetPartnerEmail={handlePartnerSetup}
+                    partnerEmail={partnerEmail}
+                    syncStatus={{ lastSync }}
+                    onUpdateDisplayName={handleDisplayNameUpdate}
+                    currentDisplayName={data.settings?.displayName}
+                  />
+                } 
+              />
+              {/* Redirect all routes to settings when not signed in */}
+              <Route path="*" element={<Navigate to="/settings" replace />} />
+            </>
+          )}
         </Routes>
       </div>
 
-      {/* Bottom Navigation */}
-      <NavigationWrapper />
+      {/* Bottom Navigation - only show when signed in */}
+      {currentUser && <NavigationWrapper />}
       
       {/* PWA Install Prompt */}
       <PWAPrompt />
@@ -154,8 +196,28 @@ function AppContent() {
 }
 
 function NavigationWrapper() {
-  const { activeTab, setActiveTab, tabs } = useNavigation();
-  return <Navigation activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />;
+  const { activeTab, setActiveTab, allTabs, visibleTabs, pinnedTabs, togglePin } = useNavigation();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  return (
+    <>
+      <Navigation 
+        tabs={visibleTabs} 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+        onMenuOpen={() => setIsMenuOpen(true)}
+      />
+      <NavigationMenu
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        allTabs={allTabs}
+        pinnedTabs={pinnedTabs}
+        onTogglePin={togglePin}
+        onNavigate={setActiveTab}
+        activeTab={activeTab}
+      />
+    </>
+  );
 }
 
 function App() {

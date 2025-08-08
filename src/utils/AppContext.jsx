@@ -16,13 +16,16 @@ import {
   getFirebaseStatus,
   createUserEntry
 } from './firebase';
+import { DEV_CONFIG, getTestUserData } from './devConfig';
 
 // Initial data structure
 const initialData = {
   moods: {},
   notes: [],
+  messages: [],
   sharedTasks: [],
   photos: [],
+  location: null,
   games: {
     scores: {},
     history: []
@@ -50,18 +53,20 @@ export const AppProvider = ({ children }) => {
   const [partnerEmail, setPartnerEmailState] = useState(null);
   const [partnerData, setPartnerData] = useState(null);
   const [data, setData] = useState(initialData);
+  const [pollingInterval, setPollingInterval] = useState(null);
+  const [partnerPollingInterval, setPartnerPollingInterval] = useState(null);
 
   // Initialize app on mount
   useEffect(() => {
     initializeApp();
   }, []);
 
-  // Auto-sync data when it changes (debounced)
+  // Auto-sync data when it changes (every 10 seconds)
   useEffect(() => {
     if (isSynced && data.lastUpdated) {
       const timeoutId = setTimeout(() => {
         syncDataToFirebase();
-      }, 2000);
+      }, 10000); // Changed from 2000 to 10000 (10 seconds)
       
       return () => clearTimeout(timeoutId);
     }
@@ -73,6 +78,18 @@ export const AppProvider = ({ children }) => {
       
       // Initialize Firebase
       await initializeFirebase();
+      
+      // Check for test user in sessionStorage (dev mode only)
+      if (import.meta.env.DEV) {
+        const storedTestUser = sessionStorage.getItem('test-user');
+        if (storedTestUser) {
+          const testUser = JSON.parse(storedTestUser);
+          console.log('Restoring test user from session:', testUser.email);
+          await signInUser(testUser);
+          setIsLoading(false);
+          return;
+        }
+      }
       
       // Set up auth state listener
       const unsubscribe = onAuthStateChange(async (user) => {
@@ -88,17 +105,18 @@ export const AppProvider = ({ children }) => {
           // Load user data using email
           await loadUserDataFromFirebase(user.email);
         } else {
-          // User signed out, load from local storage
+          // User signed out
           setCurrentUser(null);
           setIsSynced(false);
-          loadDataFromLocal();
+          setData(initialData);
+          setIsLoading(false); // Ensure loading state is cleared when no user
         }
       });
       
     } catch (error) {
       console.error('Failed to initialize app:', error);
       setSyncError(error.message);
-      loadDataFromLocal();
+      setIsLoading(false);
     }
   };
 
@@ -107,41 +125,22 @@ export const AppProvider = ({ children }) => {
       // Get user data from Firebase
       const userData = await getUserData(userEmail);
       
-      // Get local data for comparison
-      const localData = getLocalData();
-      
       let finalData;
       
       if (userData) {
         // Firebase data exists
-        const firebaseAppData = {
+        finalData = {
           moods: userData.moods || {},
           notes: userData.notes || [],
+          messages: userData.messages || [],
           sharedTasks: userData.sharedTasks || [],
           photos: userData.photos || [],
+          location: userData.location || null,
           games: userData.games || { scores: {}, history: [] },
           settings: userData.settings || initialData.settings,
           lastUpdated: userData.lastUpdated,
           updatedBy: userData.email
         };
-        
-        // Compare timestamps to determine which data is newer
-        if (localData && localData.lastUpdated && userData.lastUpdated) {
-          const localTime = new Date(localData.lastUpdated).getTime();
-          const firebaseTime = new Date(userData.lastUpdated).getTime();
-          
-          if (localTime > firebaseTime) {
-            finalData = localData;
-            await updateUserData(userEmail, localData);
-          } else {
-            finalData = firebaseAppData;
-          }
-        } else if (localData && !userData.lastUpdated) {
-          finalData = localData;
-          await updateUserData(userEmail, localData);
-        } else {
-          finalData = firebaseAppData;
-        }
         
         setData(finalData);
         setIsLoading(false);
@@ -159,90 +158,35 @@ export const AppProvider = ({ children }) => {
             setPartnerData(partnerData);
           }
           
-          // Set up real-time listeners
-          subscribeToUserData(userEmail, (updatedUserData) => {
-            const updatedAppData = {
-              moods: updatedUserData.moods || {},
-              notes: updatedUserData.notes || [],
-              sharedTasks: updatedUserData.sharedTasks || [],
-              photos: updatedUserData.photos || [],
-              games: updatedUserData.games || { scores: {}, history: [] },
-              settings: updatedUserData.settings || initialData.settings,
-              lastUpdated: updatedUserData.lastUpdated,
-              updatedBy: updatedUserData.email
-            };
-            setData(updatedAppData);
-            localStorage.setItem('couples-app-data', JSON.stringify(updatedAppData));
-          });
-          
-          subscribeToPartnerData(userData.partnerEmail, (updatedPartnerData) => {
-            setPartnerData(updatedPartnerData);
-          });
+          // Set up polling for user and partner data every 10 seconds
+          startDataPolling(userEmail, userData.partnerEmail);
         }
         
-        // Save final data to local storage
-        localStorage.setItem('couples-app-data', JSON.stringify(finalData));
-        
-      } else if (localData) {
-        // No Firebase data but local data exists
-        finalData = localData;
-        await updateUserData(userEmail, localData);
-        setData(finalData);
-        setIsLoading(false);
-        setIsSynced(true);
-        
       } else {
-        // No data anywhere - create initial data
-        const newInitialData = {
+        // No data - create initial data
+        finalData = {
           ...initialData,
           lastUpdated: new Date().toISOString(),
           updatedBy: userEmail
         };
         
-        setData(newInitialData);
+        setData(finalData);
         setIsLoading(false);
         setIsSynced(true);
         
         // Sync to Firebase
-        await updateUserData(userEmail, newInitialData);
-        localStorage.setItem('couples-app-data', JSON.stringify(newInitialData));
+        await updateUserData(userEmail, finalData);
       }
     } catch (error) {
       console.error('Failed to load from Firebase:', error);
       setSyncError(error.message);
-      loadDataFromLocal();
-    }
-  };
-
-  const getLocalData = () => {
-    try {
-      const localData = localStorage.getItem('couples-app-data');
-      return localData ? JSON.parse(localData) : null;
-    } catch (error) {
-      console.error('Failed to parse local storage data:', error);
-      return null;
-    }
-  };
-
-  const loadDataFromLocal = () => {
-    try {
-      const localData = getLocalData();
-      if (localData) {
-        setData(localData);
-        setIsLoading(false);
-        setIsSynced(true);
-        setLastSync(new Date().toISOString());
-      } else {
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error('Failed to load from local storage:', error);
       setIsLoading(false);
     }
   };
 
   const syncDataToFirebase = async () => {
-    const user = getCurrentUser();
+    // Use currentUser from React state instead of Firebase getCurrentUser for test users
+    const user = currentUser || getCurrentUser();
     if (!user) return;
     
     try {
@@ -258,9 +202,6 @@ export const AppProvider = ({ children }) => {
       setIsSynced(true);
       setLastSync(new Date().toISOString());
       setSyncError(null);
-      
-      // Update localStorage with the same data
-      localStorage.setItem('couples-app-data', JSON.stringify(dataToSync));
       
     } catch (error) {
       console.error('Failed to sync to Firebase:', error);
@@ -301,6 +242,38 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  const addMessage = async (messageText) => {
+    const newMessage = {
+      id: Date.now().toString(),
+      text: messageText,
+      timestamp: new Date().toISOString(),
+      sender: currentUser?.email || 'unknown'
+    };
+    
+    const newData = {
+      ...data,
+      messages: [...data.messages, newMessage],
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser?.email || 'unknown'
+    };
+    
+    setData(newData);
+    
+    // Sync to Firebase immediately
+    try {
+      const user = currentUser || getCurrentUser();
+      if (user) {
+        await updateUserData(user.email, newData);
+        setIsSynced(true);
+        setLastSync(new Date().toISOString());
+        setSyncError(null);
+      }
+    } catch (error) {
+      console.error('Failed to sync message to Firebase:', error);
+      setSyncError(error.message);
+    }
+  };
+
   const updateSettings = async (newSettings) => {
     setData({
       ...data,
@@ -313,48 +286,113 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  const updateLocation = async (locationData) => {
+    const newData = {
+      ...data,
+      location: locationData,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser?.email || 'unknown'
+    };
+    
+    setData(newData);
+    
+    // Sync to Firebase immediately
+    try {
+      const user = currentUser || getCurrentUser();
+      if (user) {
+        await updateUserData(user.email, newData);
+        setIsSynced(true);
+        setLastSync(new Date().toISOString());
+        setSyncError(null);
+      }
+    } catch (error) {
+      console.error('Failed to sync location to Firebase:', error);
+      setSyncError(error.message);
+    }
+  };
+
   const setPartnerEmail = async (email) => {
     setPartnerEmailState(email);
   };
 
   const signInUser = async (user) => {
+    // Check if this is a test email in dev mode
+    if (import.meta.env.DEV && (user.email === 'test.user@example.com' || user.email === 'test.partner@example.com')) {
+      // Clear all state first to prevent race conditions
+      setCurrentUser(null);
+      setPartnerEmailState(null);
+      setPartnerData(null);
+      setData(initialData);
+      setSyncError(null);
+      
+      const testData = getTestUserData(user.email === 'test.partner@example.com' ? 'partner' : 'user');
+      setCurrentUser(testData.user);
+      
+      // Store test user in sessionStorage for persistence
+      sessionStorage.setItem('test-user', JSON.stringify(testData.user));
+      
+      // Use normal Firebase flow for test users - no pre-populated data
+      await loadUserDataFromFirebase(user.email);
+      
+      setLastSync(Date.now());
+      setIsSynced(true);
+      return;
+    }
+    
+    // Clear test user from sessionStorage for regular users
+    if (import.meta.env.DEV) {
+      sessionStorage.removeItem('test-user');
+    }
+    
+    // Clear state for regular users too
+    setCurrentUser(null);
+    setPartnerEmailState(null);
+    setPartnerData(null);
+    setData(initialData);
+    setSyncError(null);
+    
     setCurrentUser(user);
     setIsSynced(true);
     await loadUserDataFromFirebase(user.email);
   };
 
   const signOutUserAction = async () => {
+    // Stop polling
+    stopDataPolling();
+    
+    // Clear test user from sessionStorage (dev mode)
+    if (import.meta.env.DEV) {
+      sessionStorage.removeItem('test-user');
+    }
+    
     await signOutUser();
     setCurrentUser(null);
     setIsSynced(false);
     setPartnerEmailState(null);
     setPartnerData(null);
+    setData(initialData); // Reset all user data to initial state
+    setLastSync(null);
+    setSyncError(null);
+    setIsLoading(false);
   };
 
   const forceSync = async () => {
-    const user = getCurrentUser();
+    // Use currentUser from React state instead of Firebase getCurrentUser for test users
+    const user = currentUser || getCurrentUser();
     if (user) {
       await loadUserDataFromFirebase(user.email);
     }
   };
 
   const syncLocalToFirebase = async () => {
-    const user = getCurrentUser();
-    if (!user) return;
-    
-    const localData = getLocalData();
-    if (localData) {
-      await updateUserData(user.email, {
-        ...localData,
-        lastUpdated: new Date().toISOString(),
-        updatedBy: user.email
-      });
-      await forceSync(); // Reload to ensure consistency
-    }
+    // This function is no longer needed since we don't use localStorage
+    // Just force a sync of current data
+    await syncDataToFirebase();
   };
 
   const setupPartner = async (partnerEmail) => {
-    const user = getCurrentUser();
+    // Use currentUser from React state instead of Firebase getCurrentUser for test users
+    const user = currentUser || getCurrentUser();
     if (!user) throw new Error('User not signed in');
     
     try {
@@ -374,12 +412,8 @@ export const AppProvider = ({ children }) => {
         if (partnerData) {
           setPartnerData(partnerData);
           
-          // Set up real-time listener for partner data
-          subscribeToPartnerData(partnerEmail, (updatedPartnerData) => {
-            if (updatedPartnerData) {
-              setPartnerData(updatedPartnerData);
-            }
-          });
+          // Start polling for both user and partner data
+          startDataPolling(user.email, partnerEmail);
         }
       } catch (partnerError) {
         // Partner data loading failed, but connection is still valid
@@ -395,6 +429,105 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const signInTestUser = async (testUser) => {
+    if (!DEV_CONFIG.IS_DEV) {
+      console.warn('Test sign-in is only available in development mode');
+      return;
+    }
+
+    try {
+      setCurrentUser(testUser);
+      setIsLoading(false);
+      setIsSynced(true);
+      setLastSync(new Date().toISOString());
+      setSyncError(null);
+
+      // Load test data for this user
+      const testData = getTestUserData(testUser.email);
+      if (testData) {
+        setData(testData);
+        
+        // Set partner data if available
+        if (testData.partnerEmail) {
+          setPartnerEmailState(testData.partnerEmail);
+          const partnerTestData = getTestUserData(testData.partnerEmail);
+          if (partnerTestData) {
+            setPartnerData(partnerTestData);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Test sign-in failed:', error);
+      setSyncError(error.message);
+    }
+  };
+
+  // Polling functions for 10-second updates
+  const startDataPolling = (userEmail, partnerEmail) => {
+    // Clear existing intervals
+    stopDataPolling();
+    
+    // Poll user data every 10 seconds
+    const userPolling = setInterval(async () => {
+      try {
+        const userData = await getUserData(userEmail);
+        if (userData && userData.lastUpdated !== data.lastUpdated) {
+          const updatedAppData = {
+            moods: userData.moods || {},
+            notes: userData.notes || [],
+            messages: userData.messages || [],
+            sharedTasks: userData.sharedTasks || [],
+            photos: userData.photos || [],
+            location: userData.location || null,
+            games: userData.games || { scores: {}, history: [] },
+            settings: userData.settings || initialData.settings,
+            lastUpdated: userData.lastUpdated,
+            updatedBy: userData.email
+          };
+          setData(updatedAppData);
+        }
+      } catch (error) {
+        console.error('Error polling user data:', error);
+      }
+    }, 10000);
+    
+    setPollingInterval(userPolling);
+    
+    // Poll partner data every 10 seconds if partner exists
+    if (partnerEmail) {
+      const partnerPolling = setInterval(async () => {
+        try {
+          const updatedPartnerData = await getPartnerData(partnerEmail);
+          if (updatedPartnerData) {
+            setPartnerData(updatedPartnerData);
+          }
+        } catch (error) {
+          console.error('Error polling partner data:', error);
+        }
+      }, 10000);
+      
+      setPartnerPollingInterval(partnerPolling);
+    }
+  };
+
+  const stopDataPolling = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    if (partnerPollingInterval) {
+      clearInterval(partnerPollingInterval);
+      setPartnerPollingInterval(null);
+    }
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      stopDataPolling();
+    };
+  }, []);
+
   const contextValue = {
     // State
     isLoading,
@@ -409,9 +542,12 @@ export const AppProvider = ({ children }) => {
     // Actions
     updateMood,
     addNote,
+    addMessage,
     updateSettings,
+    updateLocation,
     setPartnerEmail,
     signInUser,
+    signInTestUser,
     signOutUser: signOutUserAction,
     forceSync,
     syncLocalToFirebase,

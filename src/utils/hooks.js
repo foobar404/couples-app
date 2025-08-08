@@ -144,7 +144,7 @@ export const useCalendar = () => {
   };
 
   const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
+    return date.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local time
   };
 
   const formatDisplayDate = (date) => {
@@ -185,25 +185,67 @@ export const useNavigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const tabs = [
-    { id: 'dashboard', label: 'Home', icon: '🏠', path: '/' },
-    { id: 'mood', label: 'Mood', icon: '😊', path: '/mood' },
-    { id: 'notes', label: 'Notes', icon: '📝', path: '/notes' },
-    { id: 'games', label: 'Games', icon: '🎮', path: '/games' },
-    { id: 'settings', label: 'Settings', icon: '⚙️', path: '/settings' }
+  // All available pages with descriptions
+  const allTabs = [
+    { id: 'dashboard', label: 'Home', icon: '🏠', path: '/', description: 'Overview and widgets' },
+    { id: 'mood', label: 'Mood', icon: '😊', path: '/mood', description: 'Track daily emotions' },
+    { id: 'messenger', label: 'Messages', icon: '💬', path: '/messenger', description: 'Chat with your partner' },
+    { id: 'location', label: 'Location', icon: '📍', path: '/location', description: 'Share your location' },
+    { id: 'notes', label: 'Notes', icon: '📝', path: '/notes', description: 'Shared notes and thoughts' },
+    { id: 'games', label: 'Games', icon: '🎮', path: '/games', description: 'Fun couple games' },
+    { id: 'settings', label: 'Settings', icon: '⚙️', path: '/settings', description: 'App preferences' }
   ];
+
+  // Default pinned tabs (can be customized by user)
+  const defaultPinnedTabs = ['dashboard', 'mood', 'messenger', 'settings'];
+  
+  // Get user's pinned tabs from localStorage (in a real app, this would be in user settings)
+  const getPinnedTabs = () => {
+    try {
+      const saved = localStorage.getItem('couples-app-pinned-tabs');
+      return saved ? JSON.parse(saved) : defaultPinnedTabs;
+    } catch {
+      return defaultPinnedTabs;
+    }
+  };
+
+  const [pinnedTabs, setPinnedTabs] = useState(getPinnedTabs());
+
+  // Save pinned tabs to localStorage
+  const savePinnedTabs = (tabs) => {
+    try {
+      localStorage.setItem('couples-app-pinned-tabs', JSON.stringify(tabs));
+    } catch (error) {
+      console.error('Failed to save pinned tabs:', error);
+    }
+  };
+
+  // Toggle pin status of a tab
+  const togglePin = (tabId) => {
+    const newPinnedTabs = pinnedTabs.includes(tabId)
+      ? pinnedTabs.filter(id => id !== tabId)
+      : pinnedTabs.length < 5 // Limit to 5 pinned tabs
+      ? [...pinnedTabs, tabId]
+      : pinnedTabs; // Don't add if already at limit
+
+    setPinnedTabs(newPinnedTabs);
+    savePinnedTabs(newPinnedTabs);
+  };
+
+  // Get visible tabs for navigation bar
+  const visibleTabs = allTabs.filter(tab => pinnedTabs.includes(tab.id));
 
   // Get current active tab based on location
   const getActiveTab = () => {
     const currentPath = location.pathname;
-    const currentTab = tabs.find(tab => tab.path === currentPath);
+    const currentTab = allTabs.find(tab => tab.path === currentPath);
     return currentTab ? currentTab.id : 'dashboard';
   };
 
   const activeTab = getActiveTab();
 
   const setActiveTab = (tabId) => {
-    const tab = tabs.find(t => t.id === tabId);
+    const tab = allTabs.find(t => t.id === tabId);
     if (tab) {
       navigate(tab.path);
     }
@@ -212,6 +254,9 @@ export const useNavigation = () => {
   return {
     activeTab,
     setActiveTab,
-    tabs
+    allTabs,
+    visibleTabs,
+    pinnedTabs,
+    togglePin
   };
 };

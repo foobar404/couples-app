@@ -8,11 +8,12 @@ export const WidgetConfig = ({
 }) => {
   const [selectedWidgets, setSelectedWidgets] = useState(currentWidgets);
   const [showConfig, setShowConfig] = useState(false);
-  const [updateSuccess, setUpdateSuccess] = useState(false);
 
   // Available widgets
   const availableWidgets = [
     { id: 'mood', name: 'Today\'s Mood', emoji: '😊', description: 'Track your daily emotions' },
+    { id: 'messenger', name: 'Messages', emoji: '💬', description: 'Quick messaging with your partner' },
+    { id: 'location', name: 'Location Sharing', emoji: '📍', description: 'Share your location with your partner' },
     { id: 'notes', name: 'Recent Notes', emoji: '📝', description: 'View your latest shared notes' },
     { id: 'connection', name: 'Connection Status', emoji: '💖', description: 'See your sync status' },
     { id: 'tasks', name: 'Notes', emoji: '✅', description: 'Track shared notes and tasks' }
@@ -29,11 +30,7 @@ export const WidgetConfig = ({
   const handleSave = async () => {
     try {
       await onUpdateWidgets(selectedWidgets);
-      setUpdateSuccess(true);
-      setTimeout(() => {
-        setUpdateSuccess(false);
-        setShowConfig(false);
-      }, 2000);
+      setShowConfig(false);
     } catch (error) {
       console.error('Failed to update widgets:', error);
     }
@@ -115,12 +112,6 @@ export const WidgetConfig = ({
             </Button>
           </div>
         </div>
-
-        {updateSuccess && (
-          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
-            <span className="text-green-700">✅ Dashboard updated!</span>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -4,12 +4,14 @@ import { Grid, Button } from '../components/UI';
 import { 
   MoodWidget, 
   NotesWidget, 
+  LocationWidget,
+  MessengerWidget,
   ConnectionWidget, 
   TasksWidget, 
   PhotosWidget,
   WidgetConfig 
 } from '../components/widgets';
-import { useApp } from '../utils/AppContext';
+import { useApp } from '../utils/appContext.jsx';
 import { useNavigation } from '../utils/hooks';
 
 export const Dashboard = () => {
@@ -18,13 +20,15 @@ export const Dashboard = () => {
   const navigate = useNavigate();
   const [isUpdatingWidgets, setIsUpdatingWidgets] = useState(false);
   
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format in local time
   const todaysMood = data.moods[today];
   const partnerMood = partnerData?.moods?.[today];
   
   // Get display name for personalized greeting
-  const displayName = data.settings?.displayName || currentUser?.name;
-  const partnerDisplayName = partnerData?.settings?.displayName || 'Partner';
+  // User sees the nickname their partner gave them (from partner's settings)
+  const displayName = partnerData?.settings?.displayName || currentUser?.name;
+  // User sees the nickname they gave their partner (from their own settings)
+  const partnerDisplayName = data.settings?.displayName || 'Partner';
   
   // Get widget preferences (default to showing only mood widget)
   const dashboardWidgets = data.settings?.dashboardWidgets || ['mood'];
@@ -58,6 +62,16 @@ export const Dashboard = () => {
         partnerEmail={partnerEmail}
       />
     ),
+    messenger: (
+      <MessengerWidget 
+        key="messenger"
+      />
+    ),
+    location: (
+      <LocationWidget 
+        key="location"
+      />
+    ),
     notes: (
       <NotesWidget 
         key="notes"
@@ -87,7 +101,7 @@ export const Dashboard = () => {
   };
 
   return (
-    <div className="dashboard p-4">
+    <div className="page py-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-2">
           Good {getTimeOfDay()}{displayName ? `, ${displayName}` : ''}! 💕

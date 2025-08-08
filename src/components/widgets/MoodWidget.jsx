@@ -22,9 +22,9 @@ export const MoodWidget = ({
             <div className="mood-half mood-half--left">
               <div className="mood-display">
                 {todaysMood ? (
-                  <div className="mood-emoji">{MOODS.find(m => m.value === todaysMood)?.emoji || '🤔'}</div>
+                  <div className="mood-emoji">{MOODS.find(m => m.value === todaysMood)?.emoji || '?'}</div>
                 ) : (
-                  <div className="mood-emoji">🤔</div>
+                  <div className="mood-emoji">?</div>
                 )}
                 <div className="mood-label">You</div>
               </div>
@@ -34,9 +34,9 @@ export const MoodWidget = ({
             <div className="mood-half mood-half--right">
               <div className="mood-display">
                 {partnerMood ? (
-                  <div className="mood-emoji">{MOODS.find(m => m.value === partnerMood)?.emoji || '❓'}</div>
+                  <div className="mood-emoji">{MOODS.find(m => m.value === partnerMood)?.emoji || '?'}</div>
                 ) : (
-                  <div className="mood-emoji">❓</div>
+                  <div className="mood-emoji">?</div>
                 )}
                 <div className="mood-label">{partnerDisplayName}</div>
               </div>

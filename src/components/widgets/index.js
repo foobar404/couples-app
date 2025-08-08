@@ -3,4 +3,6 @@ export { NotesWidget } from './NotesWidget';
 export { ConnectionWidget } from './ConnectionWidget';
 export { TasksWidget } from './TasksWidget';
 export { PhotosWidget } from './PhotosWidget';
+export { LocationWidget } from './LocationWidget';
+export { MessengerWidget } from './MessengerWidget';
 export { WidgetConfig } from './WidgetConfig';

@@ -3,7 +3,7 @@ import { Calendar } from '../components/Calendar';
 import { MoodSelector } from '../components/MoodSelector';
 import { Card } from '../components/UI';
 import { useCalendar } from '../utils/hooks';
-import { useApp } from '../utils/AppContext';
+import { useApp } from '../utils/appContext';
 
 export const MoodPage = () => {
   const { data, updateMood } = useApp();
@@ -40,7 +40,7 @@ export const MoodPage = () => {
   };
 
   return (
-    <div className="mood-page p-4 max-w-2xl mx-auto">
+    <div className="page p-4 max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-2">Mood Tracker 😊</h1>
         <p className="text-textSecondary">Track your daily emotions by selecting a date</p>
@@ -69,9 +69,10 @@ export const MoodPage = () => {
               <div className="mt-4 pt-4 border-t border-border">
                 <button 
                   onClick={handleMoodRemove}
-                  className="text-sm text-red-500 hover:text-red-600"
+                  className="btn btn--secondary btn--small flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
-                  Remove current mood
+                  <span>🗑️</span>
+                  Remove Mood
                 </button>
               </div>
             )}
