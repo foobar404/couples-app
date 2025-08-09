@@ -14,6 +14,7 @@ export const WidgetConfig = ({
     { id: 'mood', name: 'Today\'s Mood', emoji: '😊', description: 'Track your daily emotions' },
     { id: 'messenger', name: 'Messages', emoji: '💬', description: 'Quick messaging with your partner' },
     { id: 'location', name: 'Location Sharing', emoji: '📍', description: 'Share your location with your partner' },
+    { id: 'notifications', name: 'Notifications', emoji: '🔔', description: 'Send sweet notifications to your partner' },
     { id: 'notes', name: 'Recent Notes', emoji: '📝', description: 'View your latest shared notes' },
     { id: 'connection', name: 'Connection Status', emoji: '💖', description: 'See your sync status' },
     { id: 'tasks', name: 'Notes', emoji: '✅', description: 'Track shared notes and tasks' }
@@ -43,7 +44,6 @@ export const WidgetConfig = ({
       <div className="mb-4">
         <Button 
           variant="secondary" 
-          size="small"
           onClick={() => setShowConfig(true)}
         >
           ⚙️ Customize Widgets
@@ -62,7 +62,7 @@ export const WidgetConfig = ({
           Choose which widgets to show on your dashboard
         </p>
         
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[300px] overflow-y-auto">
           {availableWidgets.map(widget => (
             <div key={widget.id} className="flex items-center justify-between p-2 border rounded-lg bg-white">
               <div className="flex items-center space-x-3">

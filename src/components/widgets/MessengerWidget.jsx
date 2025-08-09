@@ -82,7 +82,7 @@ export const MessengerWidget = () => {
               maxHeight: '60px'
             }}
             onLoad={(e) => {
-              console.log('Widget image loaded successfully:', text.trim());
+              // Widget image loaded successfully
             }}
             onError={(e) => {
               console.error('Widget image failed to load:', text.trim());

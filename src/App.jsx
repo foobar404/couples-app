@@ -10,6 +10,7 @@ import { MoodPage } from './pages/MoodPage';
 import { MessengerPage } from './pages/MessengerPage';
 import { LocationPage } from './pages/LocationPage';
 import { NotesPage } from './pages/NotesPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { GamesPage } from './pages/GamesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useNavigation } from './utils/hooks';
@@ -20,7 +21,6 @@ function AppContent() {
   const { 
     currentUser, 
     isLoading, 
-    lastSync, 
     syncError, 
     needsSetup,
     partnerEmail,
@@ -28,7 +28,8 @@ function AppContent() {
     updateSettings,
     signInUser,
     signOutUser: signOutUserAction,
-    setupPartner
+    setupPartner,
+    isSynced
   } = useApp();
 
   // Redirect to settings if user is not signed in
@@ -139,6 +140,7 @@ function AppContent() {
               <Route path="/mood" element={<MoodPage />} />
               <Route path="/messenger" element={<MessengerPage />} />
               <Route path="/location" element={<LocationPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/notes" element={<NotesPage />} />
               <Route path="/games" element={<GamesPage />} />
               <Route 
@@ -151,7 +153,7 @@ function AppContent() {
                     currentUser={currentUser}
                     onSetPartnerEmail={handlePartnerSetup}
                     partnerEmail={partnerEmail}
-                    syncStatus={{ lastSync }}
+                    syncStatus={{ isSynced }}
                     onUpdateDisplayName={handleDisplayNameUpdate}
                     currentDisplayName={data.settings?.displayName}
                   />
@@ -173,7 +175,7 @@ function AppContent() {
                     currentUser={currentUser}
                     onSetPartnerEmail={handlePartnerSetup}
                     partnerEmail={partnerEmail}
-                    syncStatus={{ lastSync }}
+                    syncStatus={{ isSynced }}
                     onUpdateDisplayName={handleDisplayNameUpdate}
                     currentDisplayName={data.settings?.displayName}
                   />

@@ -41,10 +41,7 @@ export const MoodPage = () => {
 
   return (
     <div className="page p-4 max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">Mood Tracker 😊</h1>
-        <p className="text-textSecondary">Track your daily emotions by selecting a date</p>
-      </div>
+      <h1 className="text-2xl font-bold mb-6 text-center">😊 Mood Tracker</h1>
 
       {/* Mood Selector - appears when date is selected */}
       {showMoodSelector && (

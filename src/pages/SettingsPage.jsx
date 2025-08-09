@@ -129,11 +129,9 @@ export const SettingsPage = ({ onSignIn, onSignOut, isUserSignedIn, currentUser,
                 <button className="btn btn--secondary w-full" onClick={onSignOut}>
                   Sign Out
                 </button>
-                {syncStatus.lastSync && (
-                  <p className="text-xs text-gray-500 mt-2 text-center">
-                    Last synced: {new Date(syncStatus.lastSync).toLocaleString()}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  {syncStatus.isSynced ? '✅ Synced' : '⏳ Syncing...'}
+                </p>
               </div>
             </div>
           </div>

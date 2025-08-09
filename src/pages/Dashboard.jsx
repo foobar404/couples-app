@@ -6,6 +6,7 @@ import {
   NotesWidget, 
   LocationWidget,
   MessengerWidget,
+  NotificationsWidget,
   ConnectionWidget, 
   TasksWidget, 
   PhotosWidget,
@@ -72,6 +73,11 @@ export const Dashboard = () => {
         key="location"
       />
     ),
+    notifications: (
+      <NotificationsWidget 
+        key="notifications"
+      />
+    ),
     notes: (
       <NotesWidget 
         key="notes"
@@ -102,12 +108,9 @@ export const Dashboard = () => {
 
   return (
     <div className="page py-4">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">
-          Good {getTimeOfDay()}{displayName ? `, ${displayName}` : ''}! 💕
-        </h1>
-        <p className="text-gray-600">Here's your daily overview</p>
-      </div>
+      <h1 className="text-2xl font-bold mb-6 text-center">
+        Good {getTimeOfDay()}{displayName ? `, ${displayName}` : ''}! 💕
+      </h1>
 
       {/* Setup Prompt (if no partner connected yet) */}
       {needsSetup && currentUser && (
@@ -140,15 +143,6 @@ export const Dashboard = () => {
         {dashboardWidgets.map(widgetKey => widgets[widgetKey]).filter(Boolean)}
       </Grid>
 
-      {/* Show message if no widgets are selected */}
-      {dashboardWidgets.length === 0 && (
-        <div className="text-center py-8">
-          <p className="text-gray-600 mb-4">No widgets selected for your dashboard</p>
-          <Button variant="primary" onClick={() => navigate('/settings')}>
-            Customize Dashboard
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

@@ -5,4 +5,5 @@ export { TasksWidget } from './TasksWidget';
 export { PhotosWidget } from './PhotosWidget';
 export { LocationWidget } from './LocationWidget';
 export { MessengerWidget } from './MessengerWidget';
+export { NotificationsWidget } from './NotificationsWidget';
 export { WidgetConfig } from './WidgetConfig';

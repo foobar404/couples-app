@@ -191,6 +191,7 @@ export const useNavigation = () => {
     { id: 'mood', label: 'Mood', icon: '😊', path: '/mood', description: 'Track daily emotions' },
     { id: 'messenger', label: 'Messages', icon: '💬', path: '/messenger', description: 'Chat with your partner' },
     { id: 'location', label: 'Location', icon: '📍', path: '/location', description: 'Share your location' },
+    { id: 'notifications', label: 'Notifications', icon: '🔔', path: '/notifications', description: 'Send sweet notifications' },
     { id: 'notes', label: 'Notes', icon: '📝', path: '/notes', description: 'Shared notes and thoughts' },
     { id: 'games', label: 'Games', icon: '🎮', path: '/games', description: 'Fun couple games' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/settings', description: 'App preferences' }

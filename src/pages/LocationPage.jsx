@@ -264,10 +264,7 @@ export const LocationPage = () => {
   return (
     <div className="page p-4 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">📍 Location Sharing</h1>
-        <p className="text-gray-600">Share your location with your partner in real-time</p>
-      </div>
+      <h1 className="text-2xl font-bold mb-6 text-center">📍 Location Sharing</h1>
 
       {/* Setup Prompt */}
       {needsSetup && currentUser && (
