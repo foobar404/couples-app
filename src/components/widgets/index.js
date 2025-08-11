@@ -6,4 +6,5 @@ export { PhotosWidget } from './PhotosWidget';
 export { LocationWidget } from './LocationWidget';
 export { MessengerWidget } from './MessengerWidget';
 export { NotificationsWidget } from './NotificationsWidget';
+export { GamesWidget } from './GamesWidget';
 export { WidgetConfig } from './WidgetConfig';

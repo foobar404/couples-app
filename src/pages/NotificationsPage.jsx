@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../utils/AppContext';
 
 export const NotificationsPage = () => {
-  const { needsSetup, currentUser } = useApp();
+  const { needsSetup, currentUser, data, sendNotificationToPartner, markNotificationAsRead, deleteNotification } = useApp();
   const navigate = useNavigate();
   
   const [newNotification, setNewNotification] = useState({
@@ -12,6 +12,11 @@ export const NotificationsPage = () => {
   });
   const [isSending, setIsSending] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Get received notifications (sorted by newest first)
+  const receivedNotifications = (data.notifications || []).sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
 
   const handleSendNotification = async (notification) => {
     if (!notification.title.trim()) {
@@ -24,57 +29,40 @@ export const NotificationsPage = () => {
       return;
     }
 
-    if (!('Notification' in window)) {
-      alert('This browser doesn\'t support notifications');
-      return;
-    }
-
     setIsSending(true);
 
     try {
-      // Request permission if not granted
-      let permission = Notification.permission;
-      if (permission === 'default') {
-        permission = await Notification.requestPermission();
-      }
-
-      if (permission === 'granted') {
-        // Create the notification
-        const notif = new Notification(notification.title, {
-          body: notification.message,
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: 'couples-app-notification',
-          requireInteraction: true,
-          actions: [
-            { action: 'reply', title: '💕 Reply' },
-            { action: 'dismiss', title: 'Dismiss' }
-          ]
-        });
-
-        // Handle notification clicks
-        notif.onclick = () => {
-          window.focus();
-          notif.close();
-        };
-
-        setSuccessMessage('Notification sent! 💕');
-        setTimeout(() => setSuccessMessage(''), 3000);
-        
-        // Reset form after successful send
-        setNewNotification({
-          title: '',
-          message: ''
-        });
-      } else {
-        alert('Notification permission denied. Please enable notifications in your browser settings.');
-      }
+      await sendNotificationToPartner(notification.title, notification.message);
+      
+      setSuccessMessage('Notification sent to your partner! 💕');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+      // Reset form after successful send
+      setNewNotification({
+        title: '',
+        message: ''
+      });
     } catch (error) {
       console.error('Failed to send notification:', error);
       alert('Failed to send notification. Please try again.');
     } finally {
       setIsSending(false);
     }
+  };
+
+  const formatDate = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffHours = Math.floor((now - date) / (1000 * 60 * 60));
+    
+    if (diffHours < 1) return 'now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 48) return 'yesterday';
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -111,16 +99,75 @@ export const NotificationsPage = () => {
         </div>
       )}
 
+      {/* Received Notifications */}
+      {receivedNotifications.length > 0 && (
+        <div className="card mb-6">
+          <div className="card__header">
+            <h3 className="card__title">💕 Messages from your partner</h3>
+          </div>
+          <div className="card__body">
+            <div className="space-y-3">
+              {receivedNotifications.map(notification => (
+                <div 
+                  key={notification.id}
+                  className={`p-4 rounded-lg border ${
+                    notification.read 
+                      ? 'bg-gray-50 border-gray-200' 
+                      : 'bg-pink-50 border-pink-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h4 className={`font-semibold mb-1 ${
+                        notification.read ? 'text-gray-900' : 'text-pink-900'
+                      }`}>
+                        {notification.title}
+                      </h4>
+                      <p className={`text-sm mb-2 ${
+                        notification.read ? 'text-gray-700' : 'text-pink-800'
+                      }`}>
+                        {notification.message}
+                      </p>
+                      <span className="text-xs text-gray-500">
+                        {formatDate(notification.timestamp)}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 ml-3">
+                      {!notification.read && (
+                        <button
+                          onClick={() => markNotificationAsRead(notification.id)}
+                          className="text-xs px-2 py-1 bg-pink-100 text-pink-700 rounded hover:bg-pink-200"
+                          title="Mark as read"
+                        >
+                          ✓
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteNotification(notification.id)}
+                        className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                        title="Delete"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Send Notification */}
       <div className="card">
         <div className="card__header">
-          <h3 className="card__title">✨ Send Notification</h3>
+          <h3 className="card__title">✨ Send Message to Partner</h3>
         </div>
         <div className="card__body">
           {/* Title Input */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notification Title
+              Message Title
             </label>
             <input
               type="text"
@@ -156,7 +203,7 @@ export const NotificationsPage = () => {
           {/* Send Button */}
           <button
             onClick={() => handleSendNotification(newNotification)}
-            disabled={!newNotification.title.trim() || !newNotification.message.trim() || isSending}
+            disabled={!newNotification.title.trim() || !newNotification.message.trim() || isSending || needsSetup}
             className="w-full sm:w-auto px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {isSending ? (
@@ -165,7 +212,7 @@ export const NotificationsPage = () => {
                 Sending...
               </span>
             ) : (
-              '🔔 Send Notification'
+              '� Send Message to Partner'
             )}
           </button>
         </div>

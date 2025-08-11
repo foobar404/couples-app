@@ -9,8 +9,10 @@ import { Dashboard } from './pages/Dashboard';
 import { MoodPage } from './pages/MoodPage';
 import { MessengerPage } from './pages/MessengerPage';
 import { LocationPage } from './pages/LocationPage';
+import { PhotosPage } from './pages/PhotosPage';
 import { NotesPage } from './pages/NotesPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { CalendarPage } from './pages/CalendarPage';
 import { GamesPage } from './pages/GamesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useNavigation } from './utils/hooks';
@@ -140,8 +142,10 @@ function AppContent() {
               <Route path="/mood" element={<MoodPage />} />
               <Route path="/messenger" element={<MessengerPage />} />
               <Route path="/location" element={<LocationPage />} />
+              <Route path="/photos" element={<PhotosPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/notes" element={<NotesPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/games" element={<GamesPage />} />
               <Route 
                 path="/settings" 

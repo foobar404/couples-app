@@ -12,12 +12,12 @@ export const WidgetConfig = ({
   // Available widgets
   const availableWidgets = [
     { id: 'mood', name: 'Today\'s Mood', emoji: '😊', description: 'Track your daily emotions' },
+    { id: 'photos', name: 'Recent Photos', emoji: '📷', description: 'View your latest photos' },
     { id: 'messenger', name: 'Messages', emoji: '💬', description: 'Quick messaging with your partner' },
     { id: 'location', name: 'Location Sharing', emoji: '📍', description: 'Share your location with your partner' },
     { id: 'notifications', name: 'Notifications', emoji: '🔔', description: 'Send sweet notifications to your partner' },
-    { id: 'notes', name: 'Recent Notes', emoji: '📝', description: 'View your latest shared notes' },
-    { id: 'connection', name: 'Connection Status', emoji: '💖', description: 'See your sync status' },
-    { id: 'tasks', name: 'Notes', emoji: '✅', description: 'Track shared notes and tasks' }
+    { id: 'notes', name: 'Shared Notes', emoji: '📝', description: 'View your latest shared notes' },
+    { id: 'games', name: 'Games', emoji: '🎮', description: 'Quick access to games and scores' }
   ];
 
   const handleWidgetToggle = (widgetId) => {

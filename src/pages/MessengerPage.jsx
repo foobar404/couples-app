@@ -231,9 +231,9 @@ export const MessengerPage = () => {
   };
 
   return (
-    <div className="messenger-page flex flex-col h-screen max-w-4xl mx-auto bg-white">
+    <div className="messenger-page flex flex-col h-screen max-w-4xl mx-auto">
       {/* Header */}
-      <div className="p-4 flex-shrink-0 border-b border-gray-200">
+      <div className="p-4 flex-shrink-0">
         <h1 className="text-2xl font-bold mb-6 text-center">💬 Messenger</h1>
       </div>
       
@@ -304,9 +304,9 @@ export const MessengerPage = () => {
             );
           })
         ) : !needsSetup ? (
-          <div className="text-center py-12" style={{ color: 'var(--color-text-secondary)' }}>
+          <div className="text-center py-12" style={{ color: 'var(--color-text)' }}>
             <div className="text-4xl mb-4">💕</div>
-            <h3 className="font-medium text-lg mb-2">Start your conversation</h3>
+            <h3 className="font-medium text-lg mb-2 ">Start your conversation</h3>
             <p className="text-sm">Send your first message to {partnerDisplayName}!</p>
           </div>
         ) : null}

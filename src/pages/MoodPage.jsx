@@ -6,7 +6,7 @@ import { useCalendar } from '../utils/hooks';
 import { useApp } from '../utils/AppContext';
 
 export const MoodPage = () => {
-  const { data, updateMood } = useApp();
+  const { data, partnerData, currentUser, partnerEmail, updateMood } = useApp();
   const {
     currentDate,
     selectedDate,
@@ -24,6 +24,10 @@ export const MoodPage = () => {
   const selectedDateStr = formatDate(selectedDate);
   const existingMood = data.moods[selectedDateStr];
 
+  // Get display names - Fixed the swap
+  const yourDisplayName = data.settings?.displayName || currentUser?.name || 'You';
+  const partnerDisplayName = partnerData?.settings?.displayName || 'Partner';
+
   const handleDateSelect = (date) => {
     setSelectedDate(date);
     setShowMoodSelector(true);
@@ -40,10 +44,10 @@ export const MoodPage = () => {
   };
 
   return (
-    <div className="page p-4 max-w-2xl mx-auto">
+    <div className="page p-4 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-center">😊 Mood Tracker</h1>
 
-      {/* Mood Selector - appears when date is selected */}
+      {/* Mood Selector */}
       {showMoodSelector && (
         <Card className="mb-6">
           <div className="p-4">
@@ -78,18 +82,59 @@ export const MoodPage = () => {
       )}
 
       {/* Calendar */}
-      <Card>
-        <div className="p-4">
-          <Calendar
-            currentDate={currentDate}
-            selectedDate={selectedDate}
-            onDateSelect={handleDateSelect}
-            onPrevMonth={goToPrevMonth}
-            onNextMonth={goToNextMonth}
-            moods={data.moods}
-          />
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Your Calendar */}
+        <Card>
+            <h2 className="text-lg font-semibold mb-4 text-center">
+              {yourDisplayName}'s Moods
+            </h2>
+            <Calendar
+              currentDate={currentDate}
+              selectedDate={selectedDate}
+              onDateSelect={handleDateSelect}
+              onPrevMonth={goToPrevMonth}
+              onNextMonth={goToNextMonth}
+              moods={data.moods}
+              className="w-full m-auto"
+            />
+        </Card>
+
+        {/* Partner Calendar */}
+        {partnerEmail && partnerData && (
+          <Card>
+            <h2 className="text-lg font-semibold mb-4 text-center">
+              {partnerDisplayName}'s Moods
+            </h2>
+            <Calendar
+              currentDate={currentDate}
+              selectedDate={selectedDate}
+              onDateSelect={() => {}} // Partner calendar is read-only
+              onPrevMonth={goToPrevMonth}
+              onNextMonth={goToNextMonth}
+              moods={partnerData.moods || {}}
+            />
+          </Card>
+        )}
+
+        {/* Partner Not Connected Message */}
+        {!partnerEmail && (
+          <Card className="flex items-center justify-center">
+            <div className="p-8 text-center">
+              <div className="text-4xl mb-4">👫</div>
+              <h3 className="font-semibold text-gray-900 mb-2">Connect with your partner</h3>
+              <p className="text-gray-600 text-sm mb-4">
+                Set up your partner's email in settings to see their mood calendar
+              </p>
+              <button 
+                onClick={() => window.location.hash = '#/settings'}
+                className="btn btn--primary btn--small"
+              >
+                Go to Settings
+              </button>
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

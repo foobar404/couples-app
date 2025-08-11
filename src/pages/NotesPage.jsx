@@ -1,45 +1,83 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../utils/AppContext';
-import { Button, Card } from '../components/UI';
+import { Button } from '../components/UI';
 
 export const NotesPage = () => {
-  const { data, addNote, updateNote, deleteNote } = useApp();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { data, addSharedNote, updateSharedNote, deleteSharedNote, currentUser } = useApp();
   const [editingNote, setEditingNote] = useState(null);
-  const [viewingDoodle, setViewingDoodle] = useState(null);
-  const [newNote, setNewNote] = useState({ title: '', content: '', type: 'text' });
+  const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteType, setNewNoteType] = useState('text');
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const textareaRef = useRef(null);
   const canvasRef = useRef(null);
+  const editCanvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPath, setCurrentPath] = useState([]);
   const [drawingColor, setDrawingColor] = useState('#6366f1');
   const [brushSize, setBrushSize] = useState(3);
 
-  const notes = data.notes || [];
+  // Use shared notes
+  const notes = data.sharedNotes || [];
+  const sortedNotes = notes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Auto-resize textarea
+  const autoResize = (textarea) => {
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+  };
 
   const handleCreateNote = async () => {
-    console.log('Creating note:', newNote);
+    // Allow creation if there's a title, text content, or it's a doodle
+    if (newNoteType === 'text' && !newNoteText.trim() && !newNoteTitle.trim()) return;
+    if (newNoteType === 'list' && !newNoteText.trim() && !newNoteTitle.trim()) return;
+    // Doodle notes can always be created
 
     try {
-      const noteData = {
-        ...newNote,
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        content: newNote.type === 'list' ? [] : newNote.content || ''
-      };
+      let content = newNoteText.trim();
+      
+      if (newNoteType === 'list') {
+        // Convert text to list items
+        const items = newNoteText.split('\n').filter(line => line.trim()).map(line => ({
+          id: Date.now().toString() + Math.random(),
+          text: line.trim(),
+          completed: false
+        }));
+        content = items.length > 0 ? items : []; // Allow empty lists
+      } else if (newNoteType === 'doodle') {
+        const canvas = canvasRef.current;
+        content = canvas ? canvas.toDataURL() : '';
+      }
 
-      console.log('Note data to be saved:', noteData);
-      await addNote(noteData);
-      setNewNote({ title: '', content: '', type: 'text' });
-      setShowCreateModal(false);
-      console.log('Note created successfully');
+      await addSharedNote({
+        title: newNoteTitle.trim() || '',
+        content: content,
+        type: newNoteType
+      });
+      
+      setNewNoteText('');
+      setNewNoteTitle('');
+      setNewNoteType('text');
+      setShowTypeSelector(false);
+      
+      if (newNoteType === 'doodle') {
+        clearCanvas();
+      }
     } catch (error) {
       console.error('Failed to create note:', error);
     }
   };
 
-  const handleUpdateNote = async (noteId, updates) => {
+  const handleUpdateNote = async (noteId, content) => {
+    if (!content.trim()) {
+      handleDeleteNote(noteId);
+      return;
+    }
+
     try {
-      await updateNote(noteId, updates);
+      await updateSharedNote(noteId, { content: content.trim() });
       setEditingNote(null);
     } catch (error) {
       console.error('Failed to update note:', error);
@@ -47,12 +85,11 @@ export const NotesPage = () => {
   };
 
   const handleDeleteNote = async (noteId) => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
-      try {
-        await deleteNote(noteId);
-      } catch (error) {
-        console.error('Failed to delete note:', error);
-      }
+    try {
+      await deleteSharedNote(noteId);
+      setEditingNote(null);
+    } catch (error) {
+      console.error('Failed to delete note:', error);
     }
   };
 
@@ -60,18 +97,18 @@ export const NotesPage = () => {
   const getEventPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     
     if (e.touches && e.touches.length > 0) {
-      // Touch event
       return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY
       };
     } else {
-      // Mouse event
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
       };
     }
   };
@@ -118,623 +155,864 @@ export const NotesPage = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const saveDoodle = async () => {
+  // Initialize canvas context for better drawing quality
+  React.useEffect(() => {
     const canvas = canvasRef.current;
-    const dataURL = canvas.toDataURL();
-    
-    try {
-      const noteData = {
-        id: Date.now().toString(),
-        title: newNote.title,
-        content: dataURL,
-        type: 'doodle',
-        timestamp: new Date().toISOString()
-      };
-
-      await addNote(noteData);
-      setNewNote({ title: '', content: '', type: 'text' });
-      setShowCreateModal(false);
-      clearCanvas();
-    } catch (error) {
-      console.error('Failed to save doodle:', error);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      // Set initial drawing state
+      ctx.strokeStyle = drawingColor;
+      ctx.lineWidth = brushSize;
     }
-  };
-
-  // List note functions
-  const addListItem = (noteId, text) => {
-    if (!text.trim()) return;
-    
-    const note = notes.find(n => n.id === noteId);
-    if (!note) return;
-
-    const newItem = {
-      id: Date.now().toString(),
-      text: text.trim(),
-      completed: false
-    };
-
-    const updatedContent = [...(note.content || []), newItem];
-    handleUpdateNote(noteId, { content: updatedContent });
-  };
-
-  const toggleListItem = (noteId, itemId) => {
-    const note = notes.find(n => n.id === noteId);
-    if (!note) return;
-
-    const updatedContent = note.content.map(item => 
-      item.id === itemId ? { ...item, completed: !item.completed } : item
-    );
-    handleUpdateNote(noteId, { content: updatedContent });
-  };
-
-  const deleteListItem = (noteId, itemId) => {
-    const note = notes.find(n => n.id === noteId);
-    if (!note) return;
-
-    const updatedContent = note.content.filter(item => item.id !== itemId);
-    handleUpdateNote(noteId, { content: updatedContent });
-  };
+  }, [drawingColor, brushSize]);
 
   const formatDate = (timestamp) => {
     const date = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
+    const now = new Date();
+    const diffHours = Math.floor((now - date) / (1000 * 60 * 60));
+    
+    if (diffHours < 1) return 'now';
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffHours < 48) return 'yesterday';
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d`;
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   return (
     <div className="notes-page page-padding">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <h1 className="text-2xl font-bold mb-6 text-center">📝 Notes</h1>
+        <h1 className="text-2xl font-bold mb-8 text-center">📝 Notes</h1>
         
-        <div className="mb-6 text-center">
-          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-            + New Note
-          </Button>
-        </div>
-
-        {/* All Notes */}
-        <div className="space-y-4">
-          {notes.length > 0 ? (
-            notes
-              .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-              .map(note => {
-                if (note.type === 'text') {
-                  return (
-                    <TextNoteCard 
-                      key={note.id} 
-                      note={note} 
-                      onEdit={() => setEditingNote(note)}
-                      onDelete={() => handleDeleteNote(note.id)}
-                      onUpdate={handleUpdateNote}
-                      isEditing={editingNote?.id === note.id}
-                      formatDate={formatDate}
-                    />
-                  );
-                } else if (note.type === 'list') {
-                  return (
-                    <ListNoteCard 
-                      key={note.id} 
-                      note={note} 
-                      onEdit={() => setEditingNote(note)}
-                      onDelete={() => handleDeleteNote(note.id)}
-                      onUpdate={handleUpdateNote}
-                      isEditing={editingNote?.id === note.id}
-                      addListItem={addListItem}
-                      toggleListItem={toggleListItem}
-                      deleteListItem={deleteListItem}
-                      formatDate={formatDate}
-                    />
-                  );
-                } else if (note.type === 'doodle') {
-                  return (
-                    <DoodleNoteCard 
-                      key={note.id} 
-                      note={note} 
-                      onView={() => setViewingDoodle(note)}
-                      onDelete={() => handleDeleteNote(note.id)}
-                      formatDate={formatDate}
-                    />
-                  );
-                }
-                return null;
-              })
-          ) : (
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">📝</div>
-              <h3 className="font-medium text-lg mb-2" style={{ color: 'var(--color-text)' }}>
-                No notes yet
-              </h3>
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                Create your first note to get started
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Create Note Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">Create New Note</h3>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewNote({ title: '', content: '', type: 'text' });
-                    if (newNote.type === 'doodle') clearCanvas();
-                  }}
-                >
-                  ×
-                </Button>
-              </div>
-
-              {/* Note Type Selection */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-3" style={{ color: 'var(--color-text)' }}>
-                  Note Type
-                </label>
-                <div className="space-y-3">
+        {/* New Note Input */}
+        <div className="mb-6">
+          <div className="bg-white rounded-lg border-2 border-gray-200 focus-within:border-pink-400 transition-colors shadow-sm">
+            {/* Note Type Selector */}
+            <div className="px-4 pt-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium text-gray-600">Type:</span>
+                <div className="flex gap-1">
                   {[
-                    { key: 'text', label: '📄 Text Note', desc: 'Simple text note' },
-                    { key: 'list', label: '☑️ List/Checklist', desc: 'Todo items with checkboxes' },
-                    { key: 'doodle', label: '🎨 Doodle/Drawing', desc: 'Draw or sketch something' }
+                    { key: 'text', icon: '📄', label: 'Text' },
+                    { key: 'list', icon: '☑️', label: 'List' },
+                    { key: 'doodle', icon: '🎨', label: 'Draw' }
                   ].map(type => (
-                    <label key={type.key} className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="noteType"
-                        value={type.key}
-                        checked={newNote.type === type.key}
-                        onChange={(e) => setNewNote({ ...newNote, type: e.target.value, content: e.target.value === 'list' ? [] : '' })}
-                        className="mt-1"
-                        style={{ accentColor: 'var(--color-primary)' }}
-                      />
-                      <div>
-                        <div className="font-medium text-sm" style={{ color: 'var(--color-text)' }}>
-                          {type.label}
-                        </div>
-                        <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                          {type.desc}
-                        </div>
-                      </div>
-                    </label>
+                    <button
+                      key={type.key}
+                      onClick={() => setNewNoteType(type.key)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        newNoteType === type.key 
+                          ? 'bg-pink-100 text-pink-700 border border-pink-300' 
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {type.icon} {type.label}
+                    </button>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Title Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
-                  Title (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={newNote.title}
-                  onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
-                  placeholder="Enter note title (optional)..."
-                  className="input w-full"
-                />
-              </div>
+            {/* Title Input */}
+            <input
+              type="text"
+              value={newNoteTitle}
+              onChange={(e) => setNewNoteTitle(e.target.value)}
+              placeholder="Note title (optional)..."
+              className="w-full px-4 py-2 border-none outline-none text-gray-800 placeholder-gray-400 font-medium"
+            />
 
-              {/* Content Based on Type */}
-              {newNote.type === 'text' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
-                    Content
-                  </label>
-                  <textarea
-                    value={newNote.content}
-                    onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
-                    placeholder="Write your note here..."
-                    rows={6}
-                    className="input w-full resize-none"
-                  />
-                </div>
-              )}
-
-              {newNote.type === 'doodle' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>
-                    Drawing Canvas
-                  </label>
-                  
-                  {/* Drawing Controls */}
-                  <div className="flex gap-4 mb-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--color-background)' }}>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm">Color:</label>
-                      <input
-                        type="color"
-                        value={drawingColor}
-                        onChange={(e) => setDrawingColor(e.target.value)}
-                        className="w-8 h-8 rounded border-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm">Size:</label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                        className="w-20"
-                      />
-                      <span className="text-sm w-6">{brushSize}</span>
-                    </div>
-                    <Button variant="secondary" size="small" onClick={clearCanvas}>
-                      Clear
-                    </Button>
-                  </div>
-
-                  <canvas
-                    ref={canvasRef}
-                    width={400}
-                    height={300}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="border rounded-lg cursor-crosshair w-full touch-none"
-                    style={{
-                      backgroundColor: 'white',
-                      border: '1px solid var(--color-border)',
-                      maxWidth: '100%',
-                      touchAction: 'none'
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewNote({ title: '', content: '', type: 'text' });
-                    if (newNote.type === 'doodle') clearCanvas();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={newNote.type === 'doodle' ? saveDoodle : handleCreateNote}
-                  disabled={
-                    newNote.type === 'text' ? !newNote.content.trim() :
-                    newNote.type === 'list' ? true : // Lists are always creatable
-                    false // Doodles are always creatable once drawn
+            {/* Content Input - varies by type */}
+            {newNoteType === 'text' && (
+              <textarea
+                ref={textareaRef}
+                value={newNoteText}
+                onChange={(e) => {
+                  setNewNoteText(e.target.value);
+                  autoResize(e.target);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleCreateNote();
                   }
-                >
-                  {newNote.type === 'doodle' ? 'Save Doodle' : 'Create Note'}
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
+                }}
+                placeholder="Write your note..."
+                className="w-full px-4 pb-4 border-none outline-none resize-none text-gray-800 placeholder-gray-400"
+                style={{ minHeight: '80px', maxHeight: '200px' }}
+              />
+            )}
 
-        {/* View Doodle Modal */}
-        {viewingDoodle && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto">
-              <div className="p-6">
-                {/* Modal Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold">
-                    {viewingDoodle.title || 'Untitled Doodle'}
-                  </h2>
+            {newNoteType === 'list' && (
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleCreateNote();
+                  }
+                }}
+                placeholder="Write each item on a new line..."
+                className="w-full px-4 pb-4 border-none outline-none resize-none text-gray-800 placeholder-gray-400"
+                style={{ minHeight: '80px', maxHeight: '200px' }}
+              />
+            )}
+
+            {newNoteType === 'doodle' && (
+              <div className="p-3">
+                {/* Drawing Controls - Streamlined for mobile */}
+                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded-lg">
+                  {/* Color Picker */}
+                  <input
+                    type="color"
+                    value={drawingColor}
+                    onChange={(e) => setDrawingColor(e.target.value)}
+                    className="w-8 h-8 rounded-full border-2 border-white shadow-sm cursor-pointer"
+                    title="Choose color"
+                  />
+                  
+                  {/* Brush Size */}
+                  <div className="flex items-center gap-1">
+                    <div className="flex flex-col items-center">
+                      <div 
+                        className="rounded-full bg-gray-600"
+                        style={{ 
+                          width: `${Math.max(4, brushSize * 2)}px`, 
+                          height: `${Math.max(4, brushSize * 2)}px` 
+                        }}
+                      />
+                      <span className="text-xs text-gray-500 mt-1">{brushSize}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="12"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                      className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(brushSize-1)/11*100}%, #e5e7eb ${(brushSize-1)/11*100}%, #e5e7eb 100%)`
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Clear Button */}
                   <button
-                    onClick={() => setViewingDoodle(null)}
-                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                    onClick={clearCanvas}
+                    className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
                   >
-                    ×
+                    Clear
                   </button>
                 </div>
 
-                {/* Full Size Doodle */}
-                <div className="mb-4">
-                  <img
-                    src={viewingDoodle.content}
-                    alt={viewingDoodle.title || 'Doodle'}
-                    className="w-full rounded-lg border max-h-[70vh] object-contain"
-                    style={{ border: '1px solid var(--color-border)' }}
-                  />
-                </div>
-
-                {/* Timestamp */}
-                <p className="text-sm text-gray-500">
-                  Created: {formatDate(viewingDoodle.timestamp)}
-                </p>
+                <canvas
+                  ref={canvasRef}
+                  width={800}
+                  height={400}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  className="border-2 border-gray-200 rounded-lg cursor-crosshair w-full touch-none bg-white shadow-sm"
+                  style={{
+                    maxWidth: '100%',
+                    height: 'auto',
+                    touchAction: 'none',
+                    aspectRatio: '2/1',
+                    minHeight: '200px'
+                  }}
+                />
               </div>
-            </div>
+            )}
+
+            {/* Action Bar */}
+            {(newNoteText.trim() || newNoteTitle.trim() || newNoteType === 'doodle') && (
+              <div className="px-4 pb-3 flex justify-between items-center border-t border-gray-100">
+                <span className="text-xs text-gray-400">
+                  {newNoteType === 'text' && `${newNoteText.length} characters`}
+                  {newNoteType === 'list' && `${newNoteText.split('\n').filter(l => l.trim()).length} items`}
+                  {newNoteType === 'doodle' && 'Draw something'}
+                  {newNoteType !== 'doodle' && ' • Press Cmd+Enter to save'}
+                </span>
+                <Button
+                  variant="primary"
+                  size="small"
+                  onClick={handleCreateNote}
+                  disabled={
+                    (newNoteType === 'text' && !newNoteText.trim() && !newNoteTitle.trim()) ||
+                    (newNoteType === 'list' && !newNoteText.trim() && !newNoteTitle.trim())
+                    // Doodle notes are never disabled - user can save empty canvas if they want
+                  }
+                >
+                  Save {newNoteType === 'text' ? 'Note' : newNoteType === 'list' ? 'List' : 'Drawing'}
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Notes List */}
+        <div className="space-y-3">
+          {sortedNotes.length > 0 ? (
+            sortedNotes.map(note => {
+              if (note.type === 'list') {
+                return (
+                  <ListNoteCard
+                    key={note.id}
+                    note={note}
+                    currentUser={currentUser}
+                    isEditing={editingNote === note.id}
+                    onEdit={() => setEditingNote(note.id)}
+                    onSave={async (updates) => {
+                      await updateSharedNote(note.id, updates);
+                      setEditingNote(null);
+                    }}
+                    onDelete={() => handleDeleteNote(note.id)}
+                    onCancel={() => setEditingNote(null)}
+                    formatDate={formatDate}
+                  />
+                );
+              } else if (note.type === 'doodle') {
+                return (
+                  <DoodleNoteCard
+                    key={note.id}
+                    note={note}
+                    currentUser={currentUser}
+                    isEditing={editingNote === note.id}
+                    onEdit={() => setEditingNote(note.id)}
+                    onSave={async (updates) => {
+                      await updateSharedNote(note.id, updates);
+                      setEditingNote(null);
+                    }}
+                    onDelete={() => handleDeleteNote(note.id)}
+                    onCancel={() => setEditingNote(null)}
+                    formatDate={formatDate}
+                    canvasRef={canvasRef}
+                    drawingColor={drawingColor}
+                    setDrawingColor={setDrawingColor}
+                    brushSize={brushSize}
+                    setBrushSize={setBrushSize}
+                    isDrawing={isDrawing}
+                    setIsDrawing={setIsDrawing}
+                    currentPath={currentPath}
+                    setCurrentPath={setCurrentPath}
+                    getEventPos={getEventPos}
+                    startDrawing={startDrawing}
+                    draw={draw}
+                    stopDrawing={stopDrawing}
+                    clearCanvas={clearCanvas}
+                  />
+                );
+              } else {
+                return (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    currentUser={currentUser}
+                    isEditing={editingNote === note.id}
+                    onEdit={() => setEditingNote(note.id)}
+                    onSave={async (updates) => {
+                      await updateSharedNote(note.id, updates);
+                      setEditingNote(null);
+                    }}
+                    onDelete={() => handleDeleteNote(note.id)}
+                    onCancel={() => setEditingNote(null)}
+                    formatDate={formatDate}
+                    autoResize={autoResize}
+                  />
+                );
+              }
+            })
+          ) : (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-4">📝</div>
+              <p className="text-gray-500">No notes yet</p>
+              <p className="text-sm text-gray-400 mt-1">Create your first note above</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// Text Note Component
-const TextNoteCard = ({ note, onEdit, onDelete, onUpdate, isEditing, formatDate }) => {
-  const [editTitle, setEditTitle] = useState(note.title);
-  const [editContent, setEditContent] = useState(note.content);
-
-  const handleSave = () => {
-    onUpdate(note.id, { title: editTitle, content: editContent });
+// Simple Note Card Component
+const NoteCard = ({ note, currentUser, isEditing, onEdit, onSave, onDelete, onCancel, formatDate, autoResize }) => {
+  // Convert content to string for editing if it's an array (list items)
+  const getEditableContent = (content) => {
+    if (Array.isArray(content)) {
+      return content.map(item => item.text || '').join('\n');
+    }
+    return typeof content === 'string' ? content : '';
   };
 
-  const handleCancel = () => {
-    setEditTitle(note.title);
-    setEditContent(note.content);
-    onEdit(null);
+  const [editText, setEditText] = useState(getEditableContent(note.content));
+  const [editTitle, setEditTitle] = useState(note.title || '');
+  const editRef = useRef(null);
+
+  React.useEffect(() => {
+    if (isEditing && editRef.current) {
+      editRef.current.focus();
+      autoResize(editRef.current);
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    onSave({ title: editTitle, content: editText });
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditText(getEditableContent(note.content));
+      setEditTitle(note.title || '');
+      onCancel();
+    }
   };
 
   if (isEditing) {
     return (
-      <Card>
+      <div className="bg-white rounded-lg border-2 border-pink-400 shadow-sm">
         <input
           type="text"
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
-          placeholder="Title (optional)..."
-          className="input w-full mb-3"
+          placeholder="Note title (optional)..."
+          className="w-full px-4 py-3 border-none outline-none text-gray-800 placeholder-gray-400 font-medium border-b border-gray-100"
         />
         <textarea
-          value={editContent}
-          onChange={(e) => setEditContent(e.target.value)}
-          rows={4}
-          className="input w-full resize-none mb-3"
+          ref={editRef}
+          value={editText}
+          onChange={(e) => {
+            setEditText(e.target.value);
+            autoResize(e.target);
+          }}
+          onKeyDown={handleKeyDown}
+          className="w-full px-4 py-3 border-none outline-none resize-none text-gray-800"
+          style={{ minHeight: '80px', maxHeight: '300px' }}
         />
-        <div className="flex gap-2 justify-end">
-          <Button variant="secondary" size="small" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="small" onClick={handleSave}>
-            Save
-          </Button>
+        <div className="px-4 pb-3 flex justify-between items-center border-t border-gray-100">
+          <span className="text-xs text-gray-400">
+            Press Cmd+Enter to save • Esc to cancel
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="small" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="small" onClick={handleSave}>
+              Save
+            </Button>
+          </div>
         </div>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={onEdit}>
-      <div className="flex justify-between items-start mb-2">
-        <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text)' }}>
-          {note.title || 'Untitled Note'}
-        </h3>
-        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button variant="secondary" size="small" onClick={onEdit}>
-            ✏️
-          </Button>
-          <Button variant="secondary" size="small" onClick={onDelete}>
-            🗑️
-          </Button>
+    <div 
+      className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      onClick={onEdit}
+    >
+      <div className="p-4">
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex-1 min-w-0">
+            {note.title && (
+              <h3 className="font-semibold text-gray-900 mb-2 break-words">
+                {note.title}
+              </h3>
+            )}
+            <p className="text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+              {typeof note.content === 'string' ? note.content : 
+               Array.isArray(note.content) ? `${note.content.length} list items` :
+               'Note content'}
+            </p>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
+            title="Delete note"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+          <span className="text-xs text-gray-400">
+            {formatDate(note.timestamp)}
+          </span>
+          <span className="text-xs text-gray-400">
+            by {note.authorEmail === currentUser?.email ? 'you' : note.author || 'partner'}
+          </span>
         </div>
       </div>
-      <p className="text-sm mb-3 whitespace-pre-wrap" style={{ color: 'var(--color-text-secondary)' }}>
-        {note.content}
-      </p>
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        {formatDate(note.timestamp)}
-      </p>
-    </Card>
+    </div>
   );
 };
 
-// List Note Component
-const ListNoteCard = ({ note, onEdit, onDelete, onUpdate, isEditing, addListItem, toggleListItem, deleteListItem, formatDate }) => {
+// List Note Card Component
+const ListNoteCard = ({ note, currentUser, isEditing, onEdit, onSave, onDelete, onCancel, formatDate }) => {
+  const [editTitle, setEditTitle] = useState(note.title || '');
   const [newItemText, setNewItemText] = useState('');
-  const [editTitle, setEditTitle] = useState(note.title);
+  const [items, setItems] = useState(Array.isArray(note.content) ? note.content : []);
 
-  const handleAddItem = () => {
-    if (newItemText.trim()) {
-      addListItem(note.id, newItemText);
-      setNewItemText('');
-    }
+  const addItem = () => {
+    if (!newItemText.trim()) return;
+    const newItem = {
+      id: Date.now().toString() + Math.random(),
+      text: newItemText.trim(),
+      completed: false
+    };
+    setItems([...items, newItem]);
+    setNewItemText('');
+  };
+
+  const toggleItem = (itemId) => {
+    setItems(items.map(item => 
+      item.id === itemId ? { ...item, completed: !item.completed } : item
+    ));
+  };
+
+  const deleteItem = (itemId) => {
+    setItems(items.filter(item => item.id !== itemId));
   };
 
   const handleSave = () => {
-    onUpdate(note.id, { title: editTitle });
+    onSave({ title: editTitle, content: items });
   };
 
-  const handleCancel = () => {
-    setEditTitle(note.title);
-    onEdit(null);
-  };
-
-  const completedCount = (note.content || []).filter(item => item.completed).length;
-  const totalCount = (note.content || []).length;
+  const completedCount = items.filter(item => item.completed).length;
 
   if (isEditing) {
     return (
-      <Card>
+      <div className="bg-white rounded-lg border-2 border-pink-400 shadow-sm">
         <input
           type="text"
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
           placeholder="List title (optional)..."
-          className="input w-full mb-3"
+          className="w-full px-4 py-3 border-none outline-none text-gray-800 placeholder-gray-400 font-medium border-b border-gray-100"
         />
-        <div className="flex gap-2 justify-end mb-3">
-          <Button variant="secondary" size="small" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="small" onClick={handleSave}>
-            Save
-          </Button>
-        </div>
         
-        {/* List Items (still functional in edit mode) */}
-        <div className="space-y-2 mb-3">
-          {(note.content || []).map(item => (
-            <div key={item.id} className="flex items-center gap-2">
-              <button
-                onClick={() => toggleListItem(note.id, item.id)}
-                className="w-5 h-5 rounded border-2 flex items-center justify-center"
-                style={{
-                  borderColor: item.completed ? 'var(--color-primary)' : 'var(--color-border)',
-                  backgroundColor: item.completed ? 'var(--color-primary)' : 'transparent'
-                }}
-              >
-                {item.completed && <span className="text-white text-xs">✓</span>}
-              </button>
-              <span
-                className={`flex-1 ${item.completed ? 'line-through opacity-60' : ''}`}
-                style={{ color: 'var(--color-text)' }}
-              >
-                {item.text}
-              </span>
-              <Button 
-                variant="secondary" 
-                size="small" 
-                onClick={() => deleteListItem(note.id, item.id)}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
+        <div className="p-4">
+          {/* List Items */}
+          <div className="space-y-2 mb-4">
+            {items.map(item => (
+              <div key={item.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => toggleItem(item.id)}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                    item.completed 
+                      ? 'bg-green-500 border-green-500' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  {item.completed && <span className="text-white text-xs">✓</span>}
+                </button>
+                <span className={`flex-1 ${item.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                  {item.text}
+                </span>
+                <button
+                  onClick={() => deleteItem(item.id)}
+                  className="text-gray-400 hover:text-red-500 p-1"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add New Item */}
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              value={newItemText}
+              onChange={(e) => setNewItemText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addItem()}
+              placeholder="Add new item..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded outline-none focus:border-pink-400"
+            />
+            <Button variant="primary" size="small" onClick={addItem}>
+              Add
+            </Button>
+          </div>
         </div>
 
-        {/* Add New Item */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newItemText}
-            onChange={(e) => setNewItemText(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddItem()}
-            placeholder="Add new item..."
-            className="input flex-1"
-          />
-          <Button variant="primary" size="small" onClick={handleAddItem}>
-            Add
-          </Button>
+        <div className="px-4 pb-3 flex justify-between items-center border-t border-gray-100">
+          <span className="text-xs text-gray-400">
+            {items.length} items • {completedCount} completed
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="small" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="small" onClick={handleSave}>
+              Save
+            </Button>
+          </div>
         </div>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <div 
-        className="flex justify-between items-start mb-3 cursor-pointer" 
-        onClick={onEdit}
-      >
-        <div>
-          <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text)' }}>
-            {note.title || 'Untitled List'}
-          </h3>
-          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            {completedCount}/{totalCount} completed
-          </p>
-        </div>
-        <div onClick={(e) => e.stopPropagation()}>
-          <Button variant="secondary" size="small" onClick={onDelete}>
-            🗑️
-          </Button>
-        </div>
-      </div>
-
-      {/* List Items */}
-      <div className="space-y-2 mb-3">
-        {(note.content || []).map(item => (
-          <div key={item.id} className="flex items-center gap-2">
-            <button
-              onClick={() => toggleListItem(note.id, item.id)}
-              className="w-5 h-5 rounded border-2 flex items-center justify-center"
-              style={{
-                borderColor: item.completed ? 'var(--color-primary)' : 'var(--color-border)',
-                backgroundColor: item.completed ? 'var(--color-primary)' : 'transparent'
-              }}
-            >
-              {item.completed && <span className="text-white text-xs">✓</span>}
-            </button>
-            <span
-              className={`flex-1 ${item.completed ? 'line-through opacity-60' : ''}`}
-              style={{ color: 'var(--color-text)' }}
-            >
-              {item.text}
-            </span>
-            <Button 
-              variant="secondary" 
-              size="small" 
-              onClick={() => deleteListItem(note.id, item.id)}
-            >
-              ×
-            </Button>
+    <div 
+      className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      onClick={onEdit}
+    >
+      <div className="p-4">
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex-1 min-w-0">
+            {note.title && (
+              <h3 className="font-semibold text-gray-900 mb-2 break-words">
+                {note.title}
+              </h3>
+            )}
+            <div className="space-y-1 mb-3">
+              {(note.content || []).slice(0, 3).map(item => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${
+                    item.completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300'
+                  }`}>
+                    {item.completed && '✓'}
+                  </span>
+                  <span className={`text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                    {item.text}
+                  </span>
+                </div>
+              ))}
+              {(note.content || []).length > 3 && (
+                <p className="text-xs text-gray-400 pl-6">
+                  +{(note.content || []).length - 3} more items
+                </p>
+              )}
+            </div>
           </div>
-        ))}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
+            title="Delete list"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">
+              {formatDate(note.timestamp)}
+            </span>
+            <span className="text-xs text-gray-400">
+              {completedCount}/{(note.content || []).length} completed
+            </span>
+          </div>
+          <span className="text-xs text-gray-400">
+            by {note.authorEmail === currentUser?.email ? 'you' : note.author || 'partner'}
+          </span>
+        </div>
       </div>
-
-      {/* Add New Item */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newItemText}
-          onChange={(e) => setNewItemText(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleAddItem()}
-          placeholder="Add new item..."
-          className="flex-1 input"
-        />
-        <Button
-          variant="primary"
-          size="small"
-          onClick={handleAddItem}
-          disabled={!newItemText.trim()}
-        >
-          Add
-        </Button>
-      </div>
-
-      <p className="text-xs mt-3" style={{ color: 'var(--color-text-secondary)' }}>
-        {formatDate(note.timestamp)}
-      </p>
-    </Card>
+    </div>
   );
 };
 
-// Doodle Note Component
-const DoodleNoteCard = ({ note, onView, onDelete, formatDate }) => {
+// Doodle Note Card Component
+const DoodleNoteCard = ({ 
+  note, 
+  currentUser, 
+  isEditing, 
+  onEdit, 
+  onSave, 
+  onDelete, 
+  onCancel, 
+  formatDate,
+  drawingColor,
+  setDrawingColor,
+  brushSize,
+  setBrushSize
+}) => {
+  const [showFullView, setShowFullView] = useState(false);
+  const [editTitle, setEditTitle] = useState(note.title || '');
+  const editCanvasRef = useRef(null);
+  const [editIsDrawing, setEditIsDrawing] = useState(false);
+  const [editCurrentPath, setEditCurrentPath] = useState([]);
+
+  // Initialize edit canvas with existing drawing
+  React.useEffect(() => {
+    if (isEditing && editCanvasRef.current && note.content) {
+      const canvas = editCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      };
+      img.src = note.content;
+    }
+  }, [isEditing, note.content]);
+
+  const getEditEventPos = (e) => {
+    const canvas = editCanvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    if (e.touches && e.touches.length > 0) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY
+      };
+    } else {
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+  };
+
+  const startEditDrawing = (e) => {
+    e.preventDefault();
+    setEditIsDrawing(true);
+    const pos = getEditEventPos(e);
+    setEditCurrentPath([pos]);
+  };
+
+  const editDraw = (e) => {
+    e.preventDefault();
+    if (!editIsDrawing) return;
+    
+    const canvas = editCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const pos = getEditEventPos(e);
+
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = drawingColor;
+
+    if (editCurrentPath.length > 0) {
+      const lastPoint = editCurrentPath[editCurrentPath.length - 1];
+      ctx.beginPath();
+      ctx.moveTo(lastPoint.x, lastPoint.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    }
+
+    setEditCurrentPath(prev => [...prev, pos]);
+  };
+
+  const stopEditDrawing = (e) => {
+    e.preventDefault();
+    setEditIsDrawing(false);
+    setEditCurrentPath([]);
+  };
+
+  const clearEditCanvas = () => {
+    const canvas = editCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleSave = () => {
+    const canvas = editCanvasRef.current;
+    const dataURL = canvas ? canvas.toDataURL() : note.content;
+    onSave({ title: editTitle, content: dataURL });
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditTitle(note.title || '');
+      onCancel();
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="bg-white rounded-lg border-2 border-pink-400 shadow-sm">
+        <input
+          type="text"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Drawing title (optional)..."
+          className="w-full px-4 py-3 border-none outline-none text-gray-800 placeholder-gray-400 font-medium border-b border-gray-100"
+        />
+        
+        <div className="p-3">
+          {/* Drawing Controls */}
+          <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded-lg">
+            <input
+              type="color"
+              value={drawingColor}
+              onChange={(e) => setDrawingColor(e.target.value)}
+              className="w-8 h-8 rounded-full border-2 border-white shadow-sm cursor-pointer"
+              title="Choose color"
+            />
+            
+            <div className="flex items-center gap-1">
+              <div className="flex flex-col items-center">
+                <div 
+                  className="rounded-full bg-gray-600"
+                  style={{ 
+                    width: `${Math.max(4, brushSize * 2)}px`, 
+                    height: `${Math.max(4, brushSize * 2)}px` 
+                  }}
+                />
+                <span className="text-xs text-gray-500 mt-1">{brushSize}px</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="12"
+                value={brushSize}
+                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            
+            <button
+              onClick={clearEditCanvas}
+              className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          
+          <canvas
+            ref={editCanvasRef}
+            width={800}
+            height={400}
+            onMouseDown={startEditDrawing}
+            onMouseMove={editDraw}
+            onMouseUp={stopEditDrawing}
+            onMouseLeave={stopEditDrawing}
+            onTouchStart={startEditDrawing}
+            onTouchMove={editDraw}
+            onTouchEnd={stopEditDrawing}
+            className="border-2 border-gray-200 rounded-lg cursor-crosshair w-full touch-none bg-white shadow-sm"
+            style={{
+              maxWidth: '100%',
+              height: 'auto',
+              touchAction: 'none',
+              aspectRatio: '2/1',
+              minHeight: '200px'
+            }}
+          />
+        </div>
+        
+        <div className="px-4 pb-3 flex justify-between items-center border-t border-gray-100">
+          <span className="text-xs text-gray-400">
+            Press Cmd+Enter to save • Esc to cancel
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="small" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="small" onClick={handleSave}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={onView}>
-      <div className="flex justify-between items-start mb-3">
-        <h3 className="font-semibold text-lg" style={{ color: 'var(--color-text)' }}>
-          {note.title || 'Untitled Doodle'}
-        </h3>
-        <div onClick={(e) => e.stopPropagation()}>
-          <Button variant="secondary" size="small" onClick={onDelete}>
-            🗑️
-          </Button>
+    <>
+      <div 
+        className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+        onClick={() => currentUser?.email === note.authorEmail ? onEdit() : setShowFullView(true)}
+      >
+        <div className="p-4">
+          <div className="flex justify-between items-start gap-3">
+            <div className="flex-1 min-w-0">
+              {note.title && (
+                <h3 className="font-semibold text-gray-900 mb-2 break-words">
+                  {note.title}
+                </h3>
+              )}
+              <div className="mb-3">
+                <img
+                  src={note.content}
+                  alt={note.title || 'Drawing'}
+                  className="w-full rounded-lg border max-h-48 object-contain bg-gray-50"
+                />
+              </div>
+            </div>
+            {currentUser?.email === note.authorEmail && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
+                title="Delete drawing"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <span className="text-xs text-gray-400">
+              {formatDate(note.timestamp)}
+            </span>
+            <span className="text-xs text-gray-400">
+              by {note.authorEmail === currentUser?.email ? 'you' : note.author || 'partner'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="mb-3">
-        <img
-          src={note.content}
-          alt={note.title || 'Doodle'}
-          className="w-full rounded-lg border"
-          style={{ border: '1px solid var(--color-border)' }}
-        />
-      </div>
-
-      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-        {formatDate(note.timestamp)}
-      </p>
-    </Card>
+      {/* Full View Modal */}
+      {showFullView && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowFullView(false)}>
+          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">
+                  {note.title || 'Drawing'}
+                </h2>
+                <button
+                  onClick={() => setShowFullView(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mb-4">
+                <img
+                  src={note.content}
+                  alt={note.title || 'Drawing'}
+                  className="w-full rounded-lg border max-h-[70vh] object-contain"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                Created: {formatDate(note.timestamp)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

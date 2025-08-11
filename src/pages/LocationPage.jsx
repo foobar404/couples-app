@@ -252,6 +252,14 @@ export const LocationPage = () => {
     }
   };
 
+  const centerOnUserLocation = () => {
+    if (userLocation && map) {
+      map.setView([userLocation.latitude, userLocation.longitude], 15);
+    } else {
+      setLocationError('No current location available to center on');
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -288,13 +296,28 @@ export const LocationPage = () => {
 
       {/* Map Container */}
       <div className="card mb-6">
-        <div className="card__body p-0">
+        <div className="card__body p-0 relative">
           <div 
             ref={mapRef} 
             className="w-full h-80 md:h-96 rounded-lg"
             style={{ minHeight: '320px' }}
           >
           </div>
+          
+          {/* Center on User Location Button */}
+          {userLocation && (
+            <button
+              onClick={centerOnUserLocation}
+              className="absolute top-3 right-3 z-[1000] bg-white border-2 border-gray-300 rounded-lg p-2 shadow-md hover:bg-gray-50 transition-colors"
+              title="Center on your location"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                <path d="M12 2v4M12 18v4M22 12h-4M6 12H2" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

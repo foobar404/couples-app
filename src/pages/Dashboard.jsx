@@ -10,6 +10,7 @@ import {
   ConnectionWidget, 
   TasksWidget, 
   PhotosWidget,
+  GamesWidget,
   WidgetConfig 
 } from '../components/widgets';
 import { useApp } from '../utils/AppContext';
@@ -34,8 +35,13 @@ export const Dashboard = () => {
   // Get widget preferences (default to showing only mood widget)
   const dashboardWidgets = data.settings?.dashboardWidgets || ['mood'];
   
-  // Get recent notes (last 3)
-  const recentNotes = data.notes
+  // Get recent notes (last 3) - use shared notes
+  const recentNotes = (data.sharedNotes || [])
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 3);
+
+  // Get recent photos (last 3)
+  const recentPhotos = (data.photos || [])
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, 3);
 
@@ -82,7 +88,7 @@ export const Dashboard = () => {
       <NotesWidget 
         key="notes"
         recentNotes={recentNotes}
-        formatRelativeTime={formatRelativeTime}
+        currentUser={currentUser}
       />
     ),
     connection: (
@@ -101,7 +107,13 @@ export const Dashboard = () => {
     photos: (
       <PhotosWidget 
         key="photos"
-        photosCount={data.photos?.length || 0}
+        recentPhotos={recentPhotos}
+        currentUser={currentUser}
+      />
+    ),
+    games: (
+      <GamesWidget 
+        key="games"
       />
     )
   };

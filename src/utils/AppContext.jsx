@@ -15,10 +15,13 @@ import { getTestUserData } from './devConfig';
 // Initial data structure
 const initialData = {
   moods: {},
-  notes: [],
+  notes: [], // Keep for backward compatibility
+  sharedNotes: [], // New shared notes system
   messages: [],
+  notifications: [], // Partner notifications
   sharedTasks: [],
   photos: [],
+  calendarEvents: [], // Calendar events and anniversary
   location: null,
   games: {
     scores: {},
@@ -121,10 +124,12 @@ export const AppProvider = ({ children }) => {
       if (userData) {
         const finalData = {
           moods: userData.moods || {},
-          notes: userData.notes || [],
+          notes: userData.notes || [], // Keep for backward compatibility
+          sharedNotes: userData.sharedNotes || [], // New shared notes
           messages: userData.messages || [],
           sharedTasks: userData.sharedTasks || [],
           photos: userData.photos || [],
+          calendarEvents: userData.calendarEvents || [],
           location: userData.location || null,
           games: userData.games || { scores: {}, history: [] },
           settings: userData.settings || initialData.settings,
@@ -225,6 +230,42 @@ export const AppProvider = ({ children }) => {
     updateData({ notes: [...data.notes, newNote] });
   };
 
+  // New shared notes functions
+  const addSharedNote = async (noteData) => {
+    const newNote = {
+      id: noteData.id || Date.now().toString(),
+      title: noteData.title,
+      content: noteData.content,
+      type: noteData.type || 'text',
+      author: currentUser?.name || 'Unknown',
+      authorEmail: currentUser?.email || 'unknown',
+      timestamp: noteData.timestamp || new Date().toISOString(),
+      isShared: true
+    };
+
+    // Add to both user and partner data if partner exists
+    const updatedSharedNotes = [...data.sharedNotes, newNote];
+    updateData({ sharedNotes: updatedSharedNotes });
+
+    // If we have a partner, sync to their data too
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedNotes = [...(partnerData.sharedNotes || []), newNote];
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedNotes: partnerSharedNotes,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync note to partner:', error);
+      }
+    }
+  };
+
   const updateNote = async (noteId, updates) => {
     const updatedNotes = data.notes.map(note => 
       note.id === noteId 
@@ -234,9 +275,165 @@ export const AppProvider = ({ children }) => {
     updateData({ notes: updatedNotes });
   };
 
+  const updateSharedNote = async (noteId, updates) => {
+    const updatedSharedNotes = data.sharedNotes.map(note => 
+      note.id === noteId 
+        ? { ...note, ...updates, lastModified: new Date().toISOString() }
+        : note
+    );
+    updateData({ sharedNotes: updatedSharedNotes });
+
+    // Sync to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedNotes = (partnerData.sharedNotes || []).map(note => 
+            note.id === noteId 
+              ? { ...note, ...updates, lastModified: new Date().toISOString() }
+              : note
+          );
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedNotes: partnerSharedNotes,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync note update to partner:', error);
+      }
+    }
+  };
+
   const deleteNote = async (noteId) => {
     const filteredNotes = data.notes.filter(note => note.id !== noteId);
     updateData({ notes: filteredNotes });
+  };
+
+  const deleteSharedNote = async (noteId) => {
+    const filteredSharedNotes = data.sharedNotes.filter(note => note.id !== noteId);
+    updateData({ sharedNotes: filteredSharedNotes });
+
+    // Sync deletion to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedNotes = (partnerData.sharedNotes || []).filter(note => note.id !== noteId);
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedNotes: partnerSharedNotes,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync note deletion to partner:', error);
+      }
+    }
+  };
+
+  // Notification functions
+  const sendNotificationToPartner = async (title, message) => {
+    if (!partnerEmail || !currentUser) {
+      throw new Error('Partner email or current user not available');
+    }
+
+    const notification = {
+      id: Date.now().toString(),
+      title: title.trim(),
+      message: message.trim(),
+      timestamp: new Date().toISOString(),
+      from: currentUser.email,
+      read: false
+    };
+
+    try {
+      // Get current partner data
+      const currentPartnerData = await getPartnerData(partnerEmail);
+      if (!currentPartnerData) {
+        throw new Error('Partner data not found');
+      }
+
+      // Add notification to partner's notifications array
+      const updatedNotifications = [...(currentPartnerData.notifications || []), notification];
+      
+      // Update partner's data
+      await updateUserData(partnerEmail, {
+        ...currentPartnerData,
+        notifications: updatedNotifications,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: currentUser.email
+      });
+
+      return notification;
+    } catch (error) {
+      console.error('Failed to send notification to partner:', error);
+      throw error;
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      notifications: prevData.notifications.map(notif => 
+        notif.id === notificationId ? { ...notif, read: true } : notif
+      ),
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    try {
+      const userData = await getUserData(currentUser.email);
+      if (userData) {
+        const updatedNotifications = userData.notifications.map(notif => 
+          notif.id === notificationId ? { ...notif, read: true } : notif
+        );
+        
+        await updateUserData(currentUser.email, {
+          ...userData,
+          notifications: updatedNotifications,
+          lastUpdated: new Date().toISOString(),
+          updatedBy: currentUser.email
+        });
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const deleteNotification = async (notificationId) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      notifications: prevData.notifications.filter(notif => notif.id !== notificationId),
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    try {
+      const userData = await getUserData(currentUser.email);
+      if (userData) {
+        const updatedNotifications = userData.notifications.filter(notif => notif.id !== notificationId);
+        
+        await updateUserData(currentUser.email, {
+          ...userData,
+          notifications: updatedNotifications,
+          lastUpdated: new Date().toISOString(),
+          updatedBy: currentUser.email
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+    }
   };
 
   // Auto-delete messages older than 24 hours
@@ -301,6 +498,111 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  // Photo functions
+  const addPhoto = async (photoData) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      photos: [...(prevData.photos || []), photoData],
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    if (currentUser.email !== 'test@user.com' && currentUser.email !== 'test@partner.com') {
+      setTimeout(async () => {
+        try {
+          const userData = await getUserData(currentUser.email);
+          if (userData) {
+            const updatedPhotos = [...(userData.photos || []), photoData];
+            
+            await updateUserData(currentUser.email, {
+              ...userData,
+              photos: updatedPhotos,
+              lastUpdated: new Date().toISOString(),
+              updatedBy: currentUser.email
+            });
+          }
+        } catch (error) {
+          console.error('Failed to sync photo to Firebase:', error);
+          setSyncError(error.message);
+        }
+      }, 0);
+    }
+
+    // Sync to partner if connected
+    if (partnerEmail && partnerEmail !== 'test@partner.com' && partnerEmail !== 'test@user.com') {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const updatedPhotos = [...(partnerData.photos || []), photoData];
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            photos: updatedPhotos,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser.email
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync photo to partner:', error);
+      }
+    }
+  };
+
+  const deletePhoto = async (photoId) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      photos: prevData.photos.filter(photo => photo.id !== photoId),
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    if (currentUser.email !== 'test@user.com' && currentUser.email !== 'test@partner.com') {
+      setTimeout(async () => {
+        try {
+          const userData = await getUserData(currentUser.email);
+          if (userData) {
+            const updatedPhotos = userData.photos.filter(photo => photo.id !== photoId);
+            
+            await updateUserData(currentUser.email, {
+              ...userData,
+              photos: updatedPhotos,
+              lastUpdated: new Date().toISOString(),
+              updatedBy: currentUser.email
+            });
+          }
+        } catch (error) {
+          console.error('Failed to sync photo deletion to Firebase:', error);
+          setSyncError(error.message);
+        }
+      }, 0);
+    }
+
+    // Sync to partner if connected
+    if (partnerEmail && partnerEmail !== 'test@partner.com' && partnerEmail !== 'test@user.com') {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const updatedPhotos = partnerData.photos.filter(photo => photo.id !== photoId);
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            photos: updatedPhotos,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser.email
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync photo deletion to partner:', error);
+      }
+    }
+  };
+
   const updateSettings = async (newSettings) => {
     updateData({ 
       settings: { ...data.settings, ...newSettings } 
@@ -333,6 +635,116 @@ export const AppProvider = ({ children }) => {
       
       return updatedData;
     });
+  };
+
+  // Calendar Event Functions
+  const addCalendarEvent = async (eventData) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      calendarEvents: [...(prevData.calendarEvents || []), eventData],
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    if (currentUser.email !== 'test@user.com' && currentUser.email !== 'test@partner.com') {
+      setTimeout(async () => {
+        try {
+          const userData = await getUserData(currentUser.email);
+          if (userData) {
+            const updatedEvents = [...(userData.calendarEvents || []), eventData];
+            
+            await updateUserData(currentUser.email, {
+              ...userData,
+              calendarEvents: updatedEvents,
+              lastUpdated: new Date().toISOString(),
+              updatedBy: currentUser.email
+            });
+            setSyncError(null);
+          }
+        } catch (error) {
+          console.error('Failed to sync calendar event to Firebase:', error);
+          setSyncError(error.message);
+        }
+      }, 100);
+    }
+  };
+
+  const updateCalendarEvent = async (eventId, updatedEventData) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      calendarEvents: (prevData.calendarEvents || []).map(event =>
+        event.id === eventId ? { ...event, ...updatedEventData } : event
+      ),
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    if (currentUser.email !== 'test@user.com' && currentUser.email !== 'test@partner.com') {
+      setTimeout(async () => {
+        try {
+          const userData = await getUserData(currentUser.email);
+          if (userData) {
+            const updatedEvents = (userData.calendarEvents || []).map(event =>
+              event.id === eventId ? { ...event, ...updatedEventData } : event
+            );
+            
+            await updateUserData(currentUser.email, {
+              ...userData,
+              calendarEvents: updatedEvents,
+              lastUpdated: new Date().toISOString(),
+              updatedBy: currentUser.email
+            });
+            setSyncError(null);
+          }
+        } catch (error) {
+          console.error('Failed to sync calendar event update to Firebase:', error);
+          setSyncError(error.message);
+        }
+      }, 100);
+    }
+  };
+
+  const deleteCalendarEvent = async (eventId) => {
+    if (!currentUser) return;
+
+    // Update local data first
+    setData(prevData => ({
+      ...prevData,
+      calendarEvents: (prevData.calendarEvents || []).filter(event => event.id !== eventId),
+      lastUpdated: new Date().toISOString(),
+      updatedBy: currentUser.email
+    }));
+
+    // Sync to Firebase
+    if (currentUser.email !== 'test@user.com' && currentUser.email !== 'test@partner.com') {
+      setTimeout(async () => {
+        try {
+          const userData = await getUserData(currentUser.email);
+          if (userData) {
+            const updatedEvents = (userData.calendarEvents || []).filter(event => event.id !== eventId);
+            
+            await updateUserData(currentUser.email, {
+              ...userData,
+              calendarEvents: updatedEvents,
+              lastUpdated: new Date().toISOString(),
+              updatedBy: currentUser.email
+            });
+            setSyncError(null);
+          }
+        } catch (error) {
+          console.error('Failed to sync calendar event deletion to Firebase:', error);
+          setSyncError(error.message);
+        }
+      }, 100);
+    }
   };
 
   const signInUser = async (user) => {
@@ -425,9 +837,11 @@ export const AppProvider = ({ children }) => {
             const updatedAppData = {
               moods: userData.moods || {},
               notes: userData.notes || [],
+              sharedNotes: userData.sharedNotes || [],
               messages: recentMessages,
               sharedTasks: userData.sharedTasks || [],
               photos: userData.photos || [],
+              calendarEvents: userData.calendarEvents || [],
               location: userData.location || null,
               games: userData.games || { scores: {}, history: [] },
               settings: userData.settings || initialData.settings,
@@ -501,7 +915,18 @@ export const AppProvider = ({ children }) => {
     addNote,
     updateNote,
     deleteNote,
+    addSharedNote,
+    updateSharedNote,
+    deleteSharedNote,
+    sendNotificationToPartner,
+    markNotificationAsRead,
+    deleteNotification,
+    addPhoto,
+    deletePhoto,
     addMessage,
+    addCalendarEvent,
+    updateCalendarEvent,
+    deleteCalendarEvent,
     updateSettings,
     updateLocation,
     signInUser,
