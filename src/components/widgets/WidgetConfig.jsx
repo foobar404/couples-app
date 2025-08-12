@@ -17,7 +17,8 @@ export const WidgetConfig = ({
     { id: 'location', name: 'Location Sharing', emoji: '📍', description: 'Share your location with your partner' },
     { id: 'notifications', name: 'Notifications', emoji: '🔔', description: 'Send sweet notifications to your partner' },
     { id: 'notes', name: 'Shared Notes', emoji: '📝', description: 'View your latest shared notes' },
-    { id: 'games', name: 'Games', emoji: '🎮', description: 'Quick access to games and scores' }
+    { id: 'games', name: 'Games', emoji: '🎮', description: 'Quick access to games and scores' },
+    { id: 'calendar', name: 'Calendar Events', emoji: '📅', description: 'View upcoming events and pins' }
   ];
 
   const handleWidgetToggle = (widgetId) => {

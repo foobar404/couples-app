@@ -25,8 +25,8 @@ export const MoodPage = () => {
   const existingMood = data.moods[selectedDateStr];
 
   // Get display names - Fixed the swap
-  const yourDisplayName = data.settings?.displayName || currentUser?.name || 'You';
-  const partnerDisplayName = partnerData?.settings?.displayName || 'Partner';
+  const yourDisplayName = partnerData?.settings?.displayName || currentUser?.name || 'You';
+  const partnerDisplayName = data.settings?.displayName || 'Partner';
 
   const handleDateSelect = (date) => {
     setSelectedDate(date);

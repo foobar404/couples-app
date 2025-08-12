@@ -21,9 +21,10 @@ const initialData = {
   sharedNotes: [], // New shared notes system
   messages: [],
   notifications: [], // Partner notifications
-  sharedTasks: [],
   photos: [],
   calendarEvents: [], // Calendar events and anniversary
+  sharedCalendarEvents: [], // Shared calendar events
+  pinnedDates: [], // Shared pinned dates
   location: null,
   games: {
     scores: {},
@@ -130,9 +131,10 @@ export const AppProvider = ({ children }) => {
           notes: userData.notes || [], // Keep for backward compatibility
           sharedNotes: userData.sharedNotes || [], // New shared notes
           messages: userData.messages || [],
-          sharedTasks: userData.sharedTasks || [],
           photos: userData.photos || [],
           calendarEvents: userData.calendarEvents || [],
+          sharedCalendarEvents: userData.sharedCalendarEvents || [],
+          pinnedDates: userData.pinnedDates || [],
           location: userData.location || null,
           games: userData.games || { scores: {}, history: [] },
           settings: userData.settings || initialData.settings,
@@ -152,6 +154,9 @@ export const AppProvider = ({ children }) => {
         
         // Start real-time listeners
         startDataListeners(userEmail, userData.partnerEmail);
+        
+        // Migrate calendar events to shared if needed
+        await migrateCalendarEventsToShared(userData, userEmail);
         
         // Start cleanup interval for messages
         startCleanupInterval();
@@ -335,6 +340,155 @@ export const AppProvider = ({ children }) => {
         }
       } catch (error) {
         console.warn('Could not sync note deletion to partner:', error);
+      }
+    }
+  };
+
+  // Shared Calendar Events functions
+  const addSharedCalendarEvent = async (eventData) => {
+    const newEvent = {
+      id: eventData.id || Date.now().toString(),
+      title: eventData.title,
+      date: eventData.date,
+      description: eventData.description || '',
+      repeating: eventData.repeating || false,
+      repeatType: eventData.repeatType || 'yearly',
+      weekdays: eventData.weekdays || [],
+      author: currentUser?.name || 'Unknown',
+      authorEmail: currentUser?.email || 'unknown',
+      createdAt: eventData.createdAt || new Date().toISOString(),
+      isShared: true
+    };
+
+    // Add to both user and partner data if partner exists
+    const updatedSharedEvents = [...(data.sharedCalendarEvents || []), newEvent];
+    updateData({ sharedCalendarEvents: updatedSharedEvents });
+
+    // If we have a partner, sync to their data too
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedEvents = [...(partnerData.sharedCalendarEvents || []), newEvent];
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedCalendarEvents: partnerSharedEvents,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync calendar event to partner:', error);
+      }
+    }
+  };
+
+  const updateSharedCalendarEvent = async (eventId, updatedEventData) => {
+    // Update local data
+    const updatedSharedEvents = (data.sharedCalendarEvents || []).map(event =>
+      event.id === eventId ? { ...event, ...updatedEventData } : event
+    );
+    updateData({ sharedCalendarEvents: updatedSharedEvents });
+
+    // Sync to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedEvents = (partnerData.sharedCalendarEvents || []).map(event =>
+            event.id === eventId ? { ...event, ...updatedEventData } : event
+          );
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedCalendarEvents: partnerSharedEvents,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync calendar event update to partner:', error);
+      }
+    }
+  };
+
+  const deleteSharedCalendarEvent = async (eventId) => {
+    // Remove from local data
+    const updatedSharedEvents = (data.sharedCalendarEvents || []).filter(event => event.id !== eventId);
+    updateData({ sharedCalendarEvents: updatedSharedEvents });
+
+    // Sync to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerSharedEvents = (partnerData.sharedCalendarEvents || []).filter(event => event.id !== eventId);
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            sharedCalendarEvents: partnerSharedEvents,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync calendar event deletion to partner:', error);
+      }
+    }
+  };
+
+  // Shared Pinned Dates functions
+  const addPinnedDate = async (pinData) => {
+    const newPin = {
+      id: pinData.id || Date.now().toString(),
+      title: pinData.title,
+      date: pinData.date,
+      author: currentUser?.name || 'Unknown',
+      authorEmail: currentUser?.email || 'unknown',
+      createdAt: new Date().toISOString()
+    };
+
+    // Add to local data
+    const updatedPinnedDates = [...data.pinnedDates, newPin];
+    updateData({ pinnedDates: updatedPinnedDates });
+
+    // Sync to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerPinnedDates = [...(partnerData.pinnedDates || []), newPin];
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            pinnedDates: partnerPinnedDates,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync pinned date to partner:', error);
+      }
+    }
+  };
+
+  const deletePinnedDate = async (pinId) => {
+    // Remove from local data
+    const updatedPinnedDates = data.pinnedDates.filter(pin => pin.id !== pinId);
+    updateData({ pinnedDates: updatedPinnedDates });
+
+    // Sync to partner if exists
+    if (partnerEmail) {
+      try {
+        const partnerData = await getPartnerData(partnerEmail);
+        if (partnerData) {
+          const partnerPinnedDates = (partnerData.pinnedDates || []).filter(pin => pin.id !== pinId);
+          await updateUserData(partnerEmail, {
+            ...partnerData,
+            pinnedDates: partnerPinnedDates,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: currentUser?.email || 'unknown'
+          });
+        }
+      } catch (error) {
+        console.warn('Could not sync pinned date deletion to partner:', error);
       }
     }
   };
@@ -642,6 +796,45 @@ export const AppProvider = ({ children }) => {
     });
   };
 
+  // Migration function to move calendar events to shared
+  const migrateCalendarEventsToShared = async (userData, userEmail) => {
+    if (!userData.calendarEvents || userData.calendarEvents.length === 0) {
+      return; // No events to migrate
+    }
+    
+    if (userData.sharedCalendarEvents && userData.sharedCalendarEvents.length > 0) {
+      return; // Already migrated
+    }
+    
+    try {
+      // Convert individual events to shared events
+      const sharedEvents = userData.calendarEvents.map(event => ({
+        ...event,
+        isShared: true,
+        author: 'User',
+        authorEmail: userEmail
+      }));
+      
+      // Update user data with shared events
+      await updateUserData(userEmail, {
+        ...userData,
+        sharedCalendarEvents: sharedEvents,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: userEmail
+      });
+      
+      // Update local state
+      setData(prevData => ({
+        ...prevData,
+        sharedCalendarEvents: sharedEvents
+      }));
+      
+      console.log('Migrated calendar events to shared system');
+    } catch (error) {
+      console.error('Failed to migrate calendar events:', error);
+    }
+  };
+
   // Calendar Event Functions
   const addCalendarEvent = async (eventData) => {
     if (!currentUser) return;
@@ -821,19 +1014,16 @@ export const AppProvider = ({ children }) => {
 
   // Real-time listener functions
   const startDataListeners = (userEmail, partnerEmail) => {
-    console.log(`🚀 AppContext: Starting real-time listeners for ${userEmail}${partnerEmail ? ` and partner ${partnerEmail}` : ''}`);
     stopDataListeners();
     
     // Set up user data listener
     const userListener = subscribeToUserData(userEmail, (userData) => {
-      console.log(`📊 AppContext: Processing user data update for ${userEmail}`);
       if (userData?.lastUpdated) {
         const firebaseTime = new Date(userData.lastUpdated).getTime();
         const localTime = dataRef.current.lastUpdated ? new Date(dataRef.current.lastUpdated).getTime() : 0;
         
         // Only update if Firebase data is newer
         if (firebaseTime > localTime) {
-          console.log(`✅ AppContext: Applying newer Firebase data (Firebase: ${new Date(userData.lastUpdated).toLocaleTimeString()}, Local: ${dataRef.current.lastUpdated ? new Date(dataRef.current.lastUpdated).toLocaleTimeString() : 'none'})`);
           // Clean up old messages from Firebase data
           const twentyFourHoursAgo = new Date();
           twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
@@ -847,11 +1037,12 @@ export const AppProvider = ({ children }) => {
             moods: userData.moods || {},
             notes: userData.notes || [],
             sharedNotes: userData.sharedNotes || [],
+            pinnedDates: userData.pinnedDates || [],
             messages: recentMessages,
             notifications: userData.notifications || [],
-            sharedTasks: userData.sharedTasks || [],
             photos: userData.photos || [],
             calendarEvents: userData.calendarEvents || [],
+            sharedCalendarEvents: userData.sharedCalendarEvents || [],
             location: userData.location || null,
             games: userData.games || { scores: {}, history: [] },
             settings: userData.settings || initialData.settings,
@@ -859,8 +1050,6 @@ export const AppProvider = ({ children }) => {
             updatedBy: userData.email
           };
           setData(updatedAppData);
-        } else {
-          console.log(`⏭️ AppContext: Skipping older Firebase data (Firebase: ${new Date(userData.lastUpdated).toLocaleTimeString()}, Local: ${new Date(dataRef.current.lastUpdated).toLocaleTimeString()})`);
         }
       }
     });
@@ -869,7 +1058,6 @@ export const AppProvider = ({ children }) => {
     // Set up partner data listener if partner exists
     if (partnerEmail) {
       const partnerListener = subscribeToPartnerData(partnerEmail, (updatedPartnerData) => {
-        console.log(`👥 AppContext: Processing partner data update for ${partnerEmail}`);
         if (updatedPartnerData) {
           setPartnerData(updatedPartnerData);
         }
@@ -879,7 +1067,6 @@ export const AppProvider = ({ children }) => {
   };
 
   const stopDataListeners = () => {
-    console.log(`🛑 AppContext: Stopping real-time listeners`);
     if (userDataListener) {
       userDataListener(); // Firebase listeners return unsubscribe function
       setUserDataListener(null);
@@ -934,6 +1121,11 @@ export const AppProvider = ({ children }) => {
     addSharedNote,
     updateSharedNote,
     deleteSharedNote,
+    addSharedCalendarEvent,
+    updateSharedCalendarEvent,
+    deleteSharedCalendarEvent,
+    addPinnedDate,
+    deletePinnedDate,
     sendNotificationToPartner,
     markNotificationAsRead,
     deleteNotification,

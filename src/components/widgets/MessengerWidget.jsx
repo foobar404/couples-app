@@ -41,6 +41,12 @@ export const MessengerWidget = () => {
   const isImageUrl = (text) => {
     const trimmedText = text.trim();
     
+    // Check for data URI images (base64 encoded images)
+    const dataUriPattern = /^data:image\/.+;base64,/i;
+    if (dataUriPattern.test(trimmedText)) {
+      return true;
+    }
+    
     // Check for direct image URLs with extensions
     const imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|svg)($|\?)/i;
     const urlPattern = /^https?:\/\/.+/i;

@@ -1,10 +1,10 @@
 export { MoodWidget } from './MoodWidget';
 export { NotesWidget } from './NotesWidget';
 export { ConnectionWidget } from './ConnectionWidget';
-export { TasksWidget } from './TasksWidget';
 export { PhotosWidget } from './PhotosWidget';
 export { LocationWidget } from './LocationWidget';
 export { MessengerWidget } from './MessengerWidget';
 export { NotificationsWidget } from './NotificationsWidget';
 export { GamesWidget } from './GamesWidget';
+export { CalendarWidget } from './CalendarWidget';
 export { WidgetConfig } from './WidgetConfig';

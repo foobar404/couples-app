@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../utils/AppContext';
+import { compressImageFile, compressWithStats, formatFileSize } from '../utils/imageCompression';
 
 export const MessengerPage = () => {
   const { data, partnerData, needsSetup, currentUser, addMessage } = useApp();
@@ -70,28 +71,18 @@ export const MessengerPage = () => {
     
     try {
       if (isImage) {
-        // For images, create a data URL and send it
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          try {
-            await addMessage(e.target.result);
-          } catch (error) {
-            console.error('Failed to send image:', error);
-            alert('Failed to send image. Please try again.');
-          } finally {
-            setIsUploading(false);
-          }
-        };
-        reader.readAsDataURL(file);
+        // Compress image before sending
+        const compressionResult = await compressWithStats(file, 'message');
+        await addMessage(compressionResult.dataUrl);
       } else {
         // For other files, send file info
         const fileMessage = `📎 Shared file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
         await addMessage(fileMessage);
-        setIsUploading(false);
       }
     } catch (error) {
       console.error('Failed to upload file:', error);
       alert('Failed to upload file. Please try again.');
+    } finally {
       setIsUploading(false);
     }
     

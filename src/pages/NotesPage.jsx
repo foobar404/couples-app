@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../utils/AppContext';
 import { Button } from '../components/UI';
+import { compressCanvas, compressWithStats } from '../utils/imageCompression';
 
 export const NotesPage = () => {
   const { data, addSharedNote, updateSharedNote, deleteSharedNote, currentUser } = useApp();
@@ -48,7 +49,12 @@ export const NotesPage = () => {
         content = items.length > 0 ? items : []; // Allow empty lists
       } else if (newNoteType === 'doodle') {
         const canvas = canvasRef.current;
-        content = canvas ? canvas.toDataURL() : '';
+        if (canvas) {
+          const compressionResult = await compressWithStats(canvas, 'doodle');
+          content = compressionResult.dataUrl;
+        } else {
+          content = '';
+        }
       }
 
       await addSharedNote({
@@ -827,9 +833,15 @@ const DoodleNoteCard = ({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const canvas = editCanvasRef.current;
-    const dataURL = canvas ? canvas.toDataURL() : note.content;
+    let dataURL = note.content;
+    
+    if (canvas) {
+      const compressionResult = await compressWithStats(canvas, 'doodle');
+      dataURL = compressionResult.dataUrl;
+    }
+    
     onSave({ title: editTitle, content: dataURL });
   };
 

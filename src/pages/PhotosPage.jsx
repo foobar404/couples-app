@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../utils/AppContext';
 import { Button } from '../components/UI';
+import { compressImageFile, compressWithStats } from '../utils/imageCompression';
 
 export const PhotosPage = () => {
   const { data, addPhoto, deletePhoto, currentUser } = useApp();
@@ -84,32 +85,31 @@ export const PhotosPage = () => {
         }
       }
 
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
+      // Compress and convert file
+      try {
+        const compressionResult = await compressWithStats(file, 'photo');
+        
         const photoData = {
           id: Date.now().toString(),
-          imageData: e.target.result,
+          imageData: compressionResult.dataUrl,
           timestamp: new Date().toISOString(),
           location: location,
           author: currentUser?.email || 'unknown',
           filename: file.name,
-          size: file.size
+          originalSize: compressionResult.originalSize,
+          compressedSize: compressionResult.compressedSize,
+          compressionRatio: compressionResult.compressionRatio
         };
 
-        try {
-          await addPhoto(photoData);
-          // Reset file input
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-        } catch (error) {
-          console.error('Failed to save photo:', error);
-          alert('Failed to save photo. Please try again.');
+        await addPhoto(photoData);
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
         }
-      };
-      
-      reader.readAsDataURL(file);
+      } catch (photoError) {
+        console.error('Failed to save photo:', photoError);
+        alert('Failed to save photo. Please try again.');
+      }
     } catch (error) {
       console.error('Error capturing photo:', error);
       alert('Error capturing photo. Please try again.');

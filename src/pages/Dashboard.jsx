@@ -8,9 +8,9 @@ import {
   MessengerWidget,
   NotificationsWidget,
   ConnectionWidget, 
-  TasksWidget, 
   PhotosWidget,
   GamesWidget,
+  CalendarWidget,
   WidgetConfig 
 } from '../components/widgets';
 import { useApp } from '../utils/AppContext';
@@ -98,12 +98,6 @@ export const Dashboard = () => {
         formatRelativeTime={formatRelativeTime}
       />
     ),
-    tasks: (
-      <TasksWidget 
-        key="tasks"
-        tasksCount={data.sharedTasks?.length || 0}
-      />
-    ),
     photos: (
       <PhotosWidget 
         key="photos"
@@ -114,6 +108,11 @@ export const Dashboard = () => {
     games: (
       <GamesWidget 
         key="games"
+      />
+    ),
+    calendar: (
+      <CalendarWidget 
+        key="calendar"
       />
     )
   };
