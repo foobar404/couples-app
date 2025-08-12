@@ -7,48 +7,96 @@ export const CalendarPage = () => {
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [timeTogetherText, setTimeTogetherText] = useState('');
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
-  // Get anniversary and events from data
-  const anniversary = data.settings?.anniversary;
+  // Get pinned dates and events from data
+  const pinnedDates = data.settings?.pinnedDates || [];
   const events = data.calendarEvents || [];
 
-  // Calculate time together
-  useEffect(() => {
-    if (anniversary) {
-      const annivDate = new Date(anniversary);
-      const now = new Date();
-      const diffTime = Math.abs(now - annivDate);
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      const years = Math.floor(diffDays / 365);
-      const months = Math.floor((diffDays % 365) / 30);
-      const days = diffDays % 30;
-
-      let timeText = '';
-      if (years > 0) timeText += `${years} year${years > 1 ? 's' : ''}, `;
-      if (months > 0) timeText += `${months} month${months > 1 ? 's' : ''}, `;
-      timeText += `${days} day${days > 1 ? 's' : ''}`;
-      
-      setTimeTogetherText(timeText);
-    }
-  }, [anniversary]);
-
-  const handleSetAnniversary = async (date) => {
+  const handleSetPinnedDate = async (pinnedDateData) => {
     try {
+      const existingPinnedDates = data.settings?.pinnedDates || [];
+      const newPinnedDate = {
+        ...pinnedDateData,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString()
+      };
+      
       await updateSettings({
         ...data.settings,
-        anniversary: date
+        pinnedDates: [...existingPinnedDates, newPinnedDate]
       });
-      setShowEventModal(false); // Close modal after setting anniversary
+      setShowEventModal(false);
     } catch (error) {
-      console.error('Failed to set anniversary:', error);
-      alert('Failed to set anniversary. Please try again.');
+      console.error('Failed to set pinned date:', error);
+      alert('Failed to set pinned date. Please try again.');
     }
   };
 
+  const handleUpdatePinnedDate = async (pinnedDateId, pinnedDateData) => {
+    try {
+      const existingPinnedDates = data.settings?.pinnedDates || [];
+      const updatedPinnedDates = existingPinnedDates.map(pd => 
+        pd.id === pinnedDateId ? { ...pd, ...pinnedDateData } : pd
+      );
+      
+      await updateSettings({
+        ...data.settings,
+        pinnedDates: updatedPinnedDates
+      });
+      setShowEventModal(false);
+    } catch (error) {
+      console.error('Failed to update pinned date:', error);
+      alert('Failed to update pinned date. Please try again.');
+    }
+  };
+
+  const handleDeletePinnedDate = async (pinnedDateId) => {
+    if (window.confirm('Are you sure you want to delete this pinned date?')) {
+      try {
+        const existingPinnedDates = data.settings?.pinnedDates || [];
+        const updatedPinnedDates = existingPinnedDates.filter(pd => pd.id !== pinnedDateId);
+        
+        await updateSettings({
+          ...data.settings,
+          pinnedDates: updatedPinnedDates
+        });
+      } catch (error) {
+        console.error('Failed to delete pinned date:', error);
+        alert('Failed to delete pinned date. Please try again.');
+      }
+    }
+  };
+
+  // Helper function to format date using local time
+  const formatDateLocal = (dateInput) => {
+    let date;
+    if (typeof dateInput === 'string') {
+      // Parse YYYY-MM-DD string as local date
+      const [year, month, day] = dateInput.split('-').map(Number);
+      date = new Date(year, month - 1, day);
+    } else {
+      date = new Date(dateInput);
+    }
+    
+    return date.toLocaleDateString([], { 
+      weekday: 'short',
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Helper function to get date string in local time
+  const getDateStringLocal = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleDateClick = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getDateStringLocal(date);
     setSelectedDate(date);
     setShowEventModal({
       type: 'event',
@@ -87,13 +135,7 @@ export const CalendarPage = () => {
   };
 
   const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString([], { 
-      weekday: 'short',
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
+    return formatDateLocal(dateStr);
   };
 
   const getUpcomingEvents = () => {
@@ -107,6 +149,15 @@ export const CalendarPage = () => {
       .slice(0, 5);
     
     return upcoming;
+  };
+
+  const calculateDaysFromDate = (dateString) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    const now = new Date();
+    const diffTime = Math.abs(now - targetDate);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
 
   // Visual Calendar Component
@@ -132,17 +183,17 @@ export const CalendarPage = () => {
     // Add days of current month
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = getDateStringLocal(date);
       const hasEvent = events.some(event => event.date === dateStr);
-      const isAnniversary = anniversary === dateStr;
-      const isToday = dateStr === new Date().toISOString().split('T')[0];
+      const hasPinnedDate = pinnedDates.some(pd => pd.date === dateStr);
+      const isToday = dateStr === getDateStringLocal(new Date());
       
       days.push({
         day,
         date,
         dateStr,
         hasEvent,
-        isAnniversary,
+        hasPinnedDate,
         isToday
       });
     }
@@ -200,11 +251,11 @@ export const CalendarPage = () => {
               {dayData && (
                 <div className="calendar__day-content">
                   <span className="calendar__day-number">{dayData.day}</span>
-                  {dayData.isAnniversary && (
-                    <span className="calendar__day-emoji">💖</span>
+                  {dayData.hasPinnedDate && (
+                    <span className="calendar__day-emoji">📌</span>
                   )}
-                  {dayData.hasEvent && !dayData.isAnniversary && (
-                    <span className="calendar__day-emoji">�</span>
+                  {dayData.hasEvent && !dayData.hasPinnedDate && (
+                    <span className="calendar__day-emoji">📅</span>
                   )}
                 </div>
               )}
@@ -223,36 +274,58 @@ export const CalendarPage = () => {
     <div className="page p-4 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-center">💕 Our Calendar</h1>
 
-      {/* Anniversary Section */}
+      {/* Pinned Dates Section */}
       <Card className="mb-6">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              💖 Anniversary
+              📌 Pinned Dates
             </h2>
             <Button
               variant="secondary"
               size="small"
-              onClick={() => setShowEventModal('anniversary')}
+              onClick={() => setShowEventModal('pinnedDate')}
             >
-              {anniversary ? 'Update' : 'Set Date'}
+              Add Date
             </Button>
           </div>
           
-          {anniversary ? (
-            <div className="text-center">
-              <div className="text-xl font-medium mb-2">
-                {formatDate(anniversary)}
-              </div>
-              {timeTogetherText && (
-                <div className="text-sm text-textSecondary">
-                  Together for {timeTogetherText} 💕
+          {pinnedDates.length > 0 ? (
+            <div className="space-y-3">
+              {pinnedDates.map(pinnedDate => (
+                <div key={pinnedDate.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="font-medium">{pinnedDate.title}</div>
+                    <div className="text-sm text-gray-600">
+                      {formatDate(pinnedDate.date)} • {calculateDaysFromDate(pinnedDate.date)} days ago
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => {
+                        setEditingEvent(pinnedDate);
+                        setShowEventModal('pinnedDate');
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => handleDeletePinnedDate(pinnedDate.id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           ) : (
-            <div className="text-center text-textSecondary">
-              <p>Set your anniversary date to track your time together</p>
+            <div className="text-center text-gray-500">
+              <p>No pinned dates yet</p>
+              <p className="text-sm mt-1">Add important dates to track time since they happened</p>
             </div>
           )}
         </div>
@@ -273,7 +346,7 @@ export const CalendarPage = () => {
                 >
                   <div className="flex-1">
                     <span className="font-medium">{event.title}</span>
-                    <span className="text-textSecondary ml-2">{formatDate(event.date)}</span>
+                    <span className="text-gray-500 ml-2">{formatDate(event.date)}</span>
                     {event.repeating && (
                       <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
                         {event.repeatType}
@@ -308,9 +381,10 @@ export const CalendarPage = () => {
         <EventModal
           type={typeof showEventModal === 'string' ? showEventModal : showEventModal.type}
           event={editingEvent}
-          anniversary={anniversary}
+          pinnedDates={pinnedDates}
           selectedDate={typeof showEventModal === 'object' ? showEventModal.date : undefined}
-          onSave={typeof showEventModal === 'string' && showEventModal === 'anniversary' ? handleSetAnniversary : handleSaveEvent}
+          onSave={typeof showEventModal === 'string' && showEventModal === 'pinnedDate' ? handleSetPinnedDate : handleSaveEvent}
+          onUpdate={handleUpdatePinnedDate}
           onClose={() => {
             setShowEventModal(false);
             setEditingEvent(null);
@@ -322,10 +396,10 @@ export const CalendarPage = () => {
 };
 
 // Event Modal Component
-const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose }) => {
+const EventModal = ({ type, event, pinnedDates, selectedDate, onSave, onUpdate, onClose }) => {
   const [formData, setFormData] = useState({
     title: event?.title || '',
-    date: event?.date || selectedDate || new Date().toISOString().split('T')[0],
+    date: event?.date || selectedDate || new Date().toLocaleDateString('en-CA'),
     description: event?.description || '',
     repeating: event?.repeating || false,
     repeatType: event?.repeatType || 'yearly',
@@ -342,8 +416,19 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    if (type === 'anniversary') {
-      onSave(formData.date);
+    if (type === 'pinnedDate') {
+      if (!formData.title.trim()) {
+        alert('Please enter a title for the pinned date');
+        return;
+      }
+      
+      if (event) {
+        // Updating existing pinned date
+        onUpdate(event.id, formData);
+      } else {
+        // Creating new pinned date
+        onSave(formData);
+      }
     } else {
       if (!formData.title.trim()) {
         alert('Please enter a title for the event');
@@ -357,16 +442,14 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
     }
   };
 
-  const isAnniversary = type === 'anniversary';
-  const isRepeating = type === 'repeating';
+  const isPinnedDate = type === 'pinnedDate';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">
-            {isAnniversary ? '💖 Set Anniversary' : 
-             isRepeating ? '🔄 Add Repeating Event' : 
+            {isPinnedDate ? (event ? '📌 Edit Pinned Date' : '📌 Add Pinned Date') : 
              event ? '📅 Edit Event' : '📅 Add Event'}
           </h3>
           <button
@@ -378,25 +461,23 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isAnniversary && (
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Event Title
-              </label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({...formData, title: e.target.value})}
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="e.g., First Date, Birthday, Trip"
-                required
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              {isPinnedDate ? 'Title' : 'Event Title'}
+            </label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({...formData, title: e.target.value})}
+              className="w-full p-2 border border-gray-300 rounded-md"
+              placeholder={isPinnedDate ? "e.g., First Date, Started Dating" : "e.g., Birthday, Trip"}
+              required
+            />
+          </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              {isAnniversary ? 'Anniversary Date' : 'Event Date'}
+              Date
             </label>
             <input
               type="date"
@@ -407,7 +488,7 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
             />
           </div>
 
-          {!isAnniversary && (
+          {!isPinnedDate && (
             <>
               <div>
                 <label className="block text-sm font-medium mb-1">
@@ -422,69 +503,67 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
                 />
               </div>
 
-              {!isAnniversary && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="repeating"
-                    checked={formData.repeating}
-                    onChange={(e) => setFormData({...formData, repeating: e.target.checked})}
-                  />
-                  <label htmlFor="repeating" className="text-sm">
-                    Repeating event
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="repeating"
+                  checked={formData.repeating}
+                  onChange={(e) => setFormData({...formData, repeating: e.target.checked})}
+                />
+                <label htmlFor="repeating" className="text-sm">
+                  Repeating event
+                </label>
+              </div>
+
+              {formData.repeating && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Repeat Type
                   </label>
+                  <select
+                    value={formData.repeatType}
+                    onChange={(e) => setFormData({...formData, repeatType: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="yearly">Yearly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
                 </div>
               )}
 
-              {!isAnniversary && formData.repeating && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Repeat Type
-                      </label>
-                      <select
-                        value={formData.repeatType}
-                        onChange={(e) => setFormData({...formData, repeatType: e.target.value})}
-                        className="w-full p-2 border border-gray-300 rounded-md"
+              {formData.repeating && formData.repeatType === 'weekly' && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Select Days
+                  </label>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleWeekday(index)}
+                        className={`
+                          p-1 text-sm rounded border transition-colors font-medium
+                          ${formData.weekdays.includes(index)
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                          }
+                        `}
                       >
-                        <option value="yearly">Yearly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                      </select>
-                    </div>
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                  {formData.weekdays.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Please select at least one day
+                    </p>
                   )}
-
-                  {!isAnniversary && formData.repeating && formData.repeatType === 'weekly' && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Select Days
-                      </label>
-                      <div className="grid grid-cols-7 gap-2">
-                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleWeekday(index)}
-                            className={`
-                              p-1 text-sm rounded border transition-colors font-medium
-                              ${formData.weekdays.includes(index)
-                                ? 'bg-blue-500 text-white border-blue-500'
-                                : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
-                              }
-                            `}
-                          >
-                            {day}
-                          </button>
-                        ))}
-                      </div>
-                      {formData.weekdays.length === 0 && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Please select at least one day
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
+                </div>
               )}
+            </>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button
@@ -500,7 +579,7 @@ const EventModal = ({ type, event, anniversary, selectedDate, onSave, onClose })
               variant="primary"
               className="flex-1"
             >
-              {isAnniversary ? 'Set Anniversary' : 'Save Event'}
+              {isPinnedDate ? (event ? 'Update' : 'Add') : 'Save Event'}
             </Button>
           </div>
         </form>

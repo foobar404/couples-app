@@ -80,16 +80,16 @@ export const SettingsPage = ({ onSignIn, onSignOut, isUserSignedIn, currentUser,
             
             {/* Dev Mode Test Users */}
             {import.meta.env.DEV && (
-              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <div className="">
                 <button 
                   onClick={() => onSignIn('test.user@example.com')}
-                  className="btn btn--secondary btn--small flex-1 sm:flex-none"
+                  className="btn btn--secondary mr-2"
                 >
                   Test User 1
                 </button>
                 <button 
                   onClick={() => onSignIn('test.partner@example.com')}
-                  className="btn btn--secondary btn--small flex-1 sm:flex-none"
+                  className="btn btn--secondary sm:flex-none"
                 >
                   Test User 2
                 </button>

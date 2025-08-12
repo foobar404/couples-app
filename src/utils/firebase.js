@@ -135,6 +135,7 @@ export const createUserEntry = async (user) => {
 // Get user data by email
 export const getUserData = async (email) => {
     try {
+        console.log(`📥 Firebase: One-time user data fetch for ${email}`);
         const emailKey = createEmailKey(email);
         const userRef = ref(database, `users/${emailKey}`);
         const snapshot = await get(userRef);
@@ -166,6 +167,7 @@ export const updateUserData = async (email, data) => {
 // Get partner's data by email
 export const getPartnerData = async (partnerEmail) => {
     try {
+        console.log(`📥 Firebase: One-time partner data fetch for ${partnerEmail}`);
         return await getUserData(partnerEmail);
     } catch (error) {
         console.error('Error getting partner data:', error);
@@ -197,6 +199,7 @@ export const subscribeToPartnerData = (partnerEmail, callback) => {
     const userRef = ref(database, `users/${emailKey}`);
     return onValue(userRef, (snapshot) => {
         if (snapshot.exists()) {
+            console.log(`🔄 Firebase: Partner data pulled for ${partnerEmail}`);
             callback(snapshot.val());
         }
     });
@@ -207,6 +210,7 @@ export const subscribeToUserData = (email, callback) => {
     const userRef = ref(database, `users/${emailKey}`);
     return onValue(userRef, (snapshot) => {
         if (snapshot.exists()) {
+            console.log(`🔄 Firebase: User data pulled for ${email}`);
             callback(snapshot.val());
         }
     });

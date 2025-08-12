@@ -747,7 +747,6 @@ const DoodleNoteCard = ({
   brushSize,
   setBrushSize
 }) => {
-  const [showFullView, setShowFullView] = useState(false);
   const [editTitle, setEditTitle] = useState(note.title || '');
   const editCanvasRef = useRef(null);
   const [editIsDrawing, setEditIsDrawing] = useState(false);
@@ -938,7 +937,7 @@ const DoodleNoteCard = ({
     <>
       <div 
         className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-        onClick={() => currentUser?.email === note.authorEmail ? onEdit() : setShowFullView(true)}
+        onClick={onEdit}
       >
         <div className="p-4">
           <div className="flex justify-between items-start gap-3">
@@ -956,20 +955,18 @@ const DoodleNoteCard = ({
                 />
               </div>
             </div>
-            {currentUser?.email === note.authorEmail && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
-                title="Delete drawing"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                </svg>
-              </button>
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
+              title="Delete drawing"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+            </button>
           </div>
           
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
@@ -982,37 +979,6 @@ const DoodleNoteCard = ({
           </div>
         </div>
       </div>
-
-      {/* Full View Modal */}
-      {showFullView && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowFullView(false)}>
-          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">
-                  {note.title || 'Drawing'}
-                </h2>
-                <button
-                  onClick={() => setShowFullView(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="mb-4">
-                <img
-                  src={note.content}
-                  alt={note.title || 'Drawing'}
-                  className="w-full rounded-lg border max-h-[70vh] object-contain"
-                />
-              </div>
-              <p className="text-sm text-gray-500">
-                Created: {formatDate(note.timestamp)}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

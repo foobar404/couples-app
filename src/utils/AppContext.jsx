@@ -8,7 +8,9 @@ import {
   updateUserData,
   getPartnerData,
   connectPartner,
-  checkPartnerExists
+  checkPartnerExists,
+  subscribeToUserData,
+  subscribeToPartnerData
 } from './firebase';
 import { getTestUserData } from './devConfig';
 
@@ -48,10 +50,11 @@ export const AppProvider = ({ children }) => {
   const [partnerEmail, setPartnerEmailState] = useState(null);
   const [partnerData, setPartnerData] = useState(null);
   const [data, setData] = useState(initialData);
-  const [pollingInterval, setPollingInterval] = useState(null);
+  const [userDataListener, setUserDataListener] = useState(null);
+  const [partnerDataListener, setPartnerDataListener] = useState(null);
   const [cleanupInterval, setCleanupInterval] = useState(null);
   
-  // Use ref to always have current data in polling
+  // Use ref to always have current data in listeners
   const dataRef = useRef(data);
   dataRef.current = data;
 
@@ -113,7 +116,7 @@ export const AppProvider = ({ children }) => {
     setPartnerData(null);
     setData(initialData);
     setIsLoading(false);
-    stopDataPolling();
+    stopDataListeners();
     stopCleanupInterval();
   };
 
@@ -145,8 +148,10 @@ export const AppProvider = ({ children }) => {
           setPartnerEmailState(userData.partnerEmail);
           const partnerData = await getPartnerData(userData.partnerEmail);
           if (partnerData) setPartnerData(partnerData);
-          startDataPolling(userEmail, userData.partnerEmail);
         }
+        
+        // Start real-time listeners
+        startDataListeners(userEmail, userData.partnerEmail);
         
         // Start cleanup interval for messages
         startCleanupInterval();
@@ -201,7 +206,7 @@ export const AppProvider = ({ children }) => {
         lastUpdated: new Date().toISOString(),
         updatedBy: currentUser?.email || 'unknown'
       };
-      // Update ref immediately so polling has access to latest data
+      // Update ref immediately so listeners have access to latest data
       dataRef.current = newData;
       return newData;
     });
@@ -771,7 +776,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const signOutUserAction = async () => {
-    stopDataPolling();
+    stopDataListeners();
     stopCleanupInterval();
     
     if (import.meta.env.DEV) {
@@ -799,8 +804,10 @@ export const AppProvider = ({ children }) => {
         const partnerData = await getPartnerData(partnerEmail);
         if (partnerData) {
           setPartnerData(partnerData);
-          startDataPolling(user.email, partnerEmail);
         }
+        // Restart listeners with new partner
+        stopDataListeners();
+        startDataListeners(user.email, partnerEmail);
       } catch (partnerError) {
         console.warn('Could not load partner data, but connection established:', partnerError);
       }
@@ -812,65 +819,74 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Simplified polling functions
-  const startDataPolling = (userEmail, partnerEmail) => {
-    stopDataPolling();
+  // Real-time listener functions
+  const startDataListeners = (userEmail, partnerEmail) => {
+    console.log(`🚀 AppContext: Starting real-time listeners for ${userEmail}${partnerEmail ? ` and partner ${partnerEmail}` : ''}`);
+    stopDataListeners();
     
-    const polling = setInterval(async () => {
-      try {
-        // Poll user data
-        const userData = await getUserData(userEmail);
-        if (userData?.lastUpdated) {
-          const firebaseTime = new Date(userData.lastUpdated).getTime();
-          const localTime = dataRef.current.lastUpdated ? new Date(dataRef.current.lastUpdated).getTime() : 0;
-          
-          if (firebaseTime > localTime) {
-            // Clean up old messages from Firebase data
-            const twentyFourHoursAgo = new Date();
-            twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
-            
-            const recentMessages = (userData.messages || []).filter(message => {
-              const messageTime = new Date(message.timestamp);
-              return messageTime > twentyFourHoursAgo;
-            });
-            
-            const updatedAppData = {
-              moods: userData.moods || {},
-              notes: userData.notes || [],
-              sharedNotes: userData.sharedNotes || [],
-              messages: recentMessages,
-              sharedTasks: userData.sharedTasks || [],
-              photos: userData.photos || [],
-              calendarEvents: userData.calendarEvents || [],
-              location: userData.location || null,
-              games: userData.games || { scores: {}, history: [] },
-              settings: userData.settings || initialData.settings,
-              lastUpdated: userData.lastUpdated,
-              updatedBy: userData.email
-            };
-            setData(updatedAppData);
-          }
-        }
+    // Set up user data listener
+    const userListener = subscribeToUserData(userEmail, (userData) => {
+      console.log(`📊 AppContext: Processing user data update for ${userEmail}`);
+      if (userData?.lastUpdated) {
+        const firebaseTime = new Date(userData.lastUpdated).getTime();
+        const localTime = dataRef.current.lastUpdated ? new Date(dataRef.current.lastUpdated).getTime() : 0;
         
-        // Poll partner data if exists
-        if (partnerEmail) {
-          const updatedPartnerData = await getPartnerData(partnerEmail);
-          if (updatedPartnerData && (!partnerData || updatedPartnerData.lastUpdated !== partnerData.lastUpdated)) {
-            setPartnerData(updatedPartnerData);
-          }
+        // Only update if Firebase data is newer
+        if (firebaseTime > localTime) {
+          console.log(`✅ AppContext: Applying newer Firebase data (Firebase: ${new Date(userData.lastUpdated).toLocaleTimeString()}, Local: ${dataRef.current.lastUpdated ? new Date(dataRef.current.lastUpdated).toLocaleTimeString() : 'none'})`);
+          // Clean up old messages from Firebase data
+          const twentyFourHoursAgo = new Date();
+          twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+          
+          const recentMessages = (userData.messages || []).filter(message => {
+            const messageTime = new Date(message.timestamp);
+            return messageTime > twentyFourHoursAgo;
+          });
+          
+          const updatedAppData = {
+            moods: userData.moods || {},
+            notes: userData.notes || [],
+            sharedNotes: userData.sharedNotes || [],
+            messages: recentMessages,
+            notifications: userData.notifications || [],
+            sharedTasks: userData.sharedTasks || [],
+            photos: userData.photos || [],
+            calendarEvents: userData.calendarEvents || [],
+            location: userData.location || null,
+            games: userData.games || { scores: {}, history: [] },
+            settings: userData.settings || initialData.settings,
+            lastUpdated: userData.lastUpdated,
+            updatedBy: userData.email
+          };
+          setData(updatedAppData);
+        } else {
+          console.log(`⏭️ AppContext: Skipping older Firebase data (Firebase: ${new Date(userData.lastUpdated).toLocaleTimeString()}, Local: ${new Date(dataRef.current.lastUpdated).toLocaleTimeString()})`);
         }
-      } catch (error) {
-        console.error('Error polling data:', error);
       }
-    }, 2000);
+    });
+    setUserDataListener(userListener);
     
-    setPollingInterval(polling);
+    // Set up partner data listener if partner exists
+    if (partnerEmail) {
+      const partnerListener = subscribeToPartnerData(partnerEmail, (updatedPartnerData) => {
+        console.log(`👥 AppContext: Processing partner data update for ${partnerEmail}`);
+        if (updatedPartnerData) {
+          setPartnerData(updatedPartnerData);
+        }
+      });
+      setPartnerDataListener(partnerListener);
+    }
   };
 
-  const stopDataPolling = () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
+  const stopDataListeners = () => {
+    console.log(`🛑 AppContext: Stopping real-time listeners`);
+    if (userDataListener) {
+      userDataListener(); // Firebase listeners return unsubscribe function
+      setUserDataListener(null);
+    }
+    if (partnerDataListener) {
+      partnerDataListener(); // Firebase listeners return unsubscribe function
+      setPartnerDataListener(null);
     }
   };
 
@@ -895,9 +911,9 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Cleanup polling on unmount
+  // Cleanup listeners on unmount
   useEffect(() => () => {
-    stopDataPolling();
+    stopDataListeners();
     stopCleanupInterval();
   }, []);
 
